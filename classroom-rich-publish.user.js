@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Plan de cours - Publication riche Classroom
 // @namespace    https://github.com/techno-cardi/Plan-de-cours
-// @version      1.0.6
+// @version      1.0.7
 // @description  Copie le plan avec sa mise en forme, ouvre le bon groupe Classroom et publie automatiquement l'annonce.
 // @author       techno-cardi
 // @match        https://techno-cardi.github.io/Plan-de-cours/*
@@ -558,14 +558,10 @@
   }
 
   function classroomHtmlForRpc(html) {
-    const box = document.createElement('div');
-    box.innerHTML = html || '';
-    box.querySelectorAll('p').forEach(p => {
-      const div = document.createElement('div');
-      while (p.firstChild) div.appendChild(p.firstChild);
-      p.replaceWith(div);
-    });
-    return box.innerHTML.trim();
+    // Ne jamais réinjecter le HTML dans le DOM de Classroom :
+    // Google impose Trusted Types/TrustedHTML sur cette page.
+    // Le HTML a déjà été nettoyé sur le générateur avant d'être stocké dans pending.html.
+    return String(html || '').trim();
   }
 
   function getClassroomRpcContext() {
