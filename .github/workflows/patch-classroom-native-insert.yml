@@ -1,0 +1,30 @@
+name: Correctif insertion native Classroom
+on:
+  push:
+    paths:
+      - .github/patch-classroom-native-insert.py
+      - .github/workflows/patch-classroom-native-insert.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Appliquer le correctif
+        run: python .github/patch-classroom-native-insert.py
+      - name: Valider
+        run: |
+          node --check classroom-rich-publish.user.js
+          grep -q "@version      1.0.5" classroom-rich-publish.user.js
+          grep -q "dispatchRichPaste" classroom-rich-publish.user.js
+          grep -q "insertRunsWithExecCommand" classroom-rich-publish.user.js
+          grep -q "await insertRichHtml" classroom-rich-publish.user.js
+          grep -q "contenteditable') !== 'true'" classroom-rich-publish.user.js
+      - name: Committer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add classroom-rich-publish.user.js
+          git diff --cached --quiet || git commit -m "Utilise l’insertion native dans l’éditeur Classroom"
+          git push
