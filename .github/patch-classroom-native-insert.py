@@ -5,7 +5,6 @@ p = Path('classroom-rich-publish.user.js')
 s = p.read_text(encoding='utf-8')
 s = s.replace('// @version      1.0.4', '// @version      1.0.5', 1)
 
-# Ajoute un résolveur qui privilégie toujours le vrai contenteditable.
 needle = "  function findAnnouncementSurface() {\n"
 helper = r'''  function resolveEditableElement(el) {
     if (!el) return null;
@@ -17,7 +16,6 @@ helper = r'''  function resolveEditableElement(el) {
 assert needle in s, 'findAnnouncementSurface introuvable'
 s = s.replace(needle, helper + needle, 1)
 
-# Remplace les retours d'éditeur pour privilégier un vrai contenteditable.
 s = s.replace('          return { root, editor };', '          return { root, editor: resolveEditableElement(editor) || editor };', 1)
 s = s.replace('        if (editor && hasAnnouncementActions(root)) return { root, editor };', '        if (editor && hasAnnouncementActions(root)) return { root, editor: resolveEditableElement(editor) || editor };', 1)
 
@@ -149,19 +147,15 @@ insert_new = r'''  function selectEditorContents(editor) {
     editor.focus();
     clearEditorNative(editor);
 
-    // 1. Donner d'abord à l'éditeur Google un événement de collage riche.
     dispatchRichPaste(editor, html, expectedText);
     await sleep(180);
     if (matches()) return true;
 
-    // 2. Essayer l'insertion HTML native du navigateur.
     clearEditorNative(editor);
     try { document.execCommand('insertHTML', false, html); } catch (_) {}
     await sleep(120);
     if (matches()) return true;
 
-    // 3. Dernier recours : passer entièrement par les commandes natives de l'éditeur.
-    // On retape le contenu et on active gras/italique/souligné au fil des segments.
     clearEditorNative(editor);
     try { insertRunsWithExecCommand(editor, html); } catch (err) {
       console.warn('[Plan de cours → Classroom] Insertion native échouée:', err);
@@ -174,10 +168,10 @@ insert_new = r'''  function selectEditorContents(editor) {
   }
 '''
 
-s, n = re.subn(r'  function insertRichHtml\(editor, html, expectedText\) \{.*?\n  \}\n\n  function findPostButton', insert_new + '\n  function findPostButton', s, count=1, flags=re.S)
+pattern = r'  function insertRichHtml\(editor, html, expectedText\) \{.*?\n  \}\n\n  function findPostButton'
+s, n = re.subn(pattern, lambda _m: insert_new + '\n  function findPostButton', s, count=1, flags=re.S)
 assert n == 1, 'insertRichHtml non remplacé'
 
-# La fonction est désormais async.
 s = s.replace('    const inserted = insertRichHtml(editor, pending.html, pending.text);', '    const inserted = await insertRichHtml(editor, pending.html, pending.text);', 1)
 
 p.write_text(s, encoding='utf-8')
