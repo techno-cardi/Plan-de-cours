@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - .github/patch-classroom-v1010.py
+      - .github/workflows/patch-classroom-v1010.yml
 permissions:
   contents: write
 jobs:
