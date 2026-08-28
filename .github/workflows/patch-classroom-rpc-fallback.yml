@@ -1,0 +1,31 @@
+name: Fallback RPC riche Classroom
+on:
+  push:
+    paths:
+      - .github/patch-classroom-rpc-fallback.py
+      - .github/workflows/patch-classroom-rpc-fallback.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Appliquer le correctif
+        run: python .github/patch-classroom-rpc-fallback.py
+      - name: Valider
+        run: |
+          node --check classroom-rich-publish.user.js
+          grep -q "@version      1.0.6" classroom-rich-publish.user.js
+          grep -q "publishRichViaClassroomRpc" classroom-rich-publish.user.js
+          grep -q "n5NjMc" classroom-rich-publish.user.js
+          grep -q "F7Tqub" classroom-rich-publish.user.js
+          grep -q "WIZ_global_data" classroom-rich-publish.user.js
+          grep -q "state !== 3" classroom-rich-publish.user.js
+      - name: Committer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add classroom-rich-publish.user.js
+          git diff --cached --quiet || git commit -m "Ajoute un fallback RPC riche pour Classroom"
+          git push
