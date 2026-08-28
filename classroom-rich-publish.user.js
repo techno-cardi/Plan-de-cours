@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Plan de cours - Publication riche Classroom
 // @namespace    https://github.com/techno-cardi/Plan-de-cours
-// @version      1.0.0
+// @version      1.0.1
 // @description  Copie le plan avec sa mise en forme, ouvre le bon groupe Classroom et publie automatiquement l'annonce.
 // @author       techno-cardi
 // @match        https://techno-cardi.github.io/Plan-de-cours/*
@@ -155,7 +155,7 @@
   async function launchFromPlanPage() {
     const preview = document.getElementById('plan-preview');
     const copyBtn = document.getElementById('btn-copy');
-    if (!preview || !copyBtn || preview.querySelector('.empty-state')) return;
+    if (!preview || !copyBtn) return;
 
     let handling = false;
     copyBtn.addEventListener('click', async event => {
@@ -164,6 +164,10 @@
       event.stopImmediatePropagation();
       handling = true;
       try {
+        if (preview.querySelector('.empty-state') || !htmlToText(preview.innerHTML)) {
+          alert('Générez d’abord un plan de cours avant de le publier.');
+          return;
+        }
         const courseId = await chooseCourse();
         if (!courseId) return;
 
