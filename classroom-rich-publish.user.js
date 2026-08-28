@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Plan de cours - Publication riche Classroom
 // @namespace    https://github.com/techno-cardi/Plan-de-cours
-// @version      1.0.3
+// @version      1.0.4
 // @description  Copie le plan avec sa mise en forme, ouvre le bon groupe Classroom et publie automatiquement l'annonce.
 // @author       techno-cardi
 // @match        https://techno-cardi.github.io/Plan-de-cours/*
@@ -335,32 +335,63 @@
     }
   }
 
+
+  function foldText(value) {
+    return norm(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function findNewAnnouncementButton() {
+    const buttons = Array.from(document.querySelectorAll('button,[role="button"]')).filter(visible);
+    return buttons.find(el => {
+      const txt = foldText(`${el.textContent || ''} ${el.getAttribute?.('aria-label') || ''}`);
+      return txt === 'nouvelle annonce' || txt.includes('nouvelle annonce') ||
+             txt === 'new announcement' || txt.includes('new announcement');
+    }) || null;
+  }
+
+  function findAnnouncementSurface() {
+    const promptMatches = value => {
+      const txt = foldText(value);
+      return txt.includes('annoncez quelque chose a votre classe') ||
+             txt.includes('announce something to your class');
+    };
+    const actionText = el => foldText(`${el.textContent || ''} ${el.getAttribute?.('aria-label') || ''}`);
+    const hasAnnouncementActions = root => {
+      const buttons = Array.from(root.querySelectorAll('button,[role="button"]')).filter(visible);
+      const texts = buttons.map(actionText);
+      const hasCancel = texts.some(t => t === 'annuler' || t === 'cancel');
+      const hasPublish = texts.some(t => t === 'publier' || t === 'post' || t.startsWith('publier '));
+      return hasCancel || hasPublish;
+    };
+
+    // Première méthode : partir du vrai éditeur et vérifier qu'il appartient au panneau « Annonce ».
+    const editors = Array.from(document.querySelectorAll('[contenteditable="true"],[role="textbox"]')).filter(visible);
+    for (const editor of editors) {
+      let root = editor;
+      for (let i = 0; i < 14 && root; i++, root = root.parentElement) {
+        const descriptor = `${root.textContent || ''} ${root.getAttribute?.('aria-label') || ''} ${root.getAttribute?.('data-placeholder') || ''}`;
+        if (promptMatches(descriptor) && hasAnnouncementActions(root)) {
+          return { root, editor };
+        }
+      }
+    }
+
+    // Deuxième méthode : partir du libellé « Annoncez quelque chose à votre classe » puis remonter au panneau.
+    const labels = Array.from(document.querySelectorAll('div,span,p,label')).filter(visible);
+    for (const label of labels) {
+      const descriptor = `${label.textContent || ''} ${label.getAttribute?.('aria-label') || ''} ${label.getAttribute?.('data-placeholder') || ''}`;
+      if (!promptMatches(descriptor)) continue;
+      let root = label;
+      for (let i = 0; i < 14 && root; i++, root = root.parentElement) {
+        const editor = Array.from(root.querySelectorAll('[contenteditable="true"],[role="textbox"]')).find(visible);
+        if (editor && hasAnnouncementActions(root)) return { root, editor };
+      }
+    }
+    return null;
+  }
+
   function findAnnouncementEditor() {
-    const all = Array.from(document.querySelectorAll('[contenteditable="true"], [role="textbox"]')).filter(visible);
-    if (!all.length) return null;
-
-    // Le champ actuel de Classroom affiche « Annoncez quelque chose à votre classe ».
-    const exact = all.find(el => {
-      const own = composerText(el);
-      const parentText = composerText(el.parentElement);
-      const grandParentText = composerText(el.parentElement?.parentElement);
-      const hay = `${own} ${parentText} ${grandParentText}`;
-      return /annoncez quelque chose a votre classe|announce something to your class/.test(hay);
-    });
-    if (exact) return exact;
-
-    // Dans la fenêtre « Annonce », privilégier le plus grand champ éditable visible.
-    const scored = all.map(el => {
-      const r = el.getBoundingClientRect();
-      const label = composerText(el);
-      let score = Math.min(r.width, 900) / 8 + Math.min(r.height, 350) / 8;
-      if (/annonc|announc|classe|class/.test(label)) score += 140;
-      if (r.width > 300) score += 50;
-      if (r.height > 35) score += 30;
-      if (r.top > 100 && r.top < innerHeight * 0.8) score += 20;
-      return { el, score };
-    }).sort((a,b) => b.score - a.score);
-    return scored[0]?.el || null;
+    return findAnnouncementSurface()?.editor || null;
   }
 
   function insertRichHtml(editor, html, expectedText) {
@@ -457,43 +488,41 @@
       return;
     }
 
-    let editor = findAnnouncementEditor();
-    if (!editor) {
+    // Ne jamais prendre un champ de commentaire du fil. Le seul éditeur admissible
+    // doit appartenir au panneau « Annonce » avec le libellé Classroom et Annuler/Publier.
+    let surface = findAnnouncementSurface();
+    if (!surface) {
       let trigger = null;
       for (let i = 0; i < 30 && !trigger; i++) {
-        trigger = findComposerTrigger();
-        if (!trigger) await sleep(350);
+        trigger = findNewAnnouncementButton();
+        if (!trigger) await sleep(250);
       }
       if (!trigger) {
-        const diagnostics = textCandidates()
-          .map(el => ({ text: composerText(el), score: composerScore(el) }))
-          .filter(x => x.text && x.score > 20)
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 5)
-          .map(x => x.text.slice(0, 90));
-        console.warn('[Plan de cours → Classroom] Déclencheur introuvable. Candidats:', diagnostics);
-        showClassroomFallback('Je suis dans le groupe, mais je n’ai pas retrouvé la zone pour créer une annonce. Recharge Classroom une fois et réessaie; si ça bloque encore, le diagnostic est dans la console.');
+        showClassroomFallback('Je suis dans le groupe, mais je n’ai pas retrouvé le bouton « Nouvelle annonce ».');
         pending.status = 'manual'; GM_setValue(PENDING_KEY, pending); return;
       }
+
       activateElement(trigger);
+
+      for (let i = 0; i < 35 && !surface; i++) {
+        await sleep(200);
+        surface = findAnnouncementSurface();
+      }
     }
 
-    for (let i = 0; i < 30 && !editor; i++) {
-      editor = findAnnouncementEditor();
-      if (!editor) await sleep(300);
-    }
-    if (!editor) {
-      showClassroomFallback('L’éditeur d’annonce ne s’est pas ouvert comme prévu.');
+    if (!surface?.editor) {
+      showClassroomFallback('La fenêtre « Annonce » s’est ouverte, mais je n’ai pas retrouvé son champ de rédaction.');
       pending.status = 'manual'; GM_setValue(PENDING_KEY, pending); return;
     }
 
+    const editor = surface.editor;
     const inserted = insertRichHtml(editor, pending.html, pending.text);
     if (!inserted) {
-      showClassroomFallback('Classroom a bloqué l’insertion automatique du contenu.');
+      console.warn('[Plan de cours → Classroom] Mauvais éditeur évité. Panneau annonce détecté:', surface.root, 'éditeur:', editor);
+      showClassroomFallback('La bonne fenêtre « Annonce » est ouverte, mais Classroom a refusé l’insertion riche automatique.');
       pending.status = 'manual'; GM_setValue(PENDING_KEY, pending); return;
     }
 
-    // Classroom peut mettre un court délai avant d'activer « Publier » après l'insertion.
     let postButton = null;
     for (let i = 0; i < 25 && !postButton; i++) {
       postButton = findPostButton(editor);
@@ -501,8 +530,8 @@
     }
     if (!postButton) {
       const disabledPost = findPostButton(editor, true);
-      console.warn('[Plan de cours → Classroom] Bouton Publier détecté mais état:', disabledPost ? { disabled: disabledPost.disabled, ariaDisabled: disabledPost.getAttribute('aria-disabled'), text: disabledPost.textContent } : 'introuvable');
-      showClassroomFallback('Le plan est dans l’éditeur, mais le bouton « Publier » n’est pas devenu disponible.');
+      console.warn('[Plan de cours → Classroom] Bouton Publier:', disabledPost || 'introuvable');
+      showClassroomFallback('Le plan est dans l’annonce, mais le bouton « Publier » n’est pas devenu disponible.');
       pending.status = 'manual'; GM_setValue(PENDING_KEY, pending); return;
     }
 
@@ -510,7 +539,7 @@
     const expected = norm(pending.text);
     const signature = expected.slice(0, Math.min(70, expected.length));
     if (!signature || !actual.includes(signature)) {
-      showClassroomFallback('La vérification du contenu a échoué; publication automatique annulée.');
+      showClassroomFallback('La vérification du contenu de l’annonce a échoué; publication automatique annulée.');
       pending.status = 'manual'; GM_setValue(PENDING_KEY, pending); return;
     }
 
