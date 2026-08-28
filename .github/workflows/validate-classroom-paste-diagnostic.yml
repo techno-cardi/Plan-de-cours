@@ -1,0 +1,25 @@
+name: Valide diagnostic collage Classroom
+on:
+  push:
+    paths:
+      - classroom-paste-diagnostic-v1.0.0.user.js
+      - .github/workflows/validate-classroom-paste-diagnostic.yml
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Valider JavaScript
+        run: node --check classroom-paste-diagnostic-v1.0.0.user.js
+      - name: Valider les points critiques
+        run: |
+          grep -q '@version      1.0.0' classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "addEventListener('paste'" classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "beforeinput" classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "isTrusted" classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "clipboardData" classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "MutationObserver" classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "publishButton" classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "GM_setClipboard(text, 'text')" classroom-paste-diagnostic-v1.0.0.user.js
