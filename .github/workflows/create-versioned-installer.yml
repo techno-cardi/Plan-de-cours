@@ -1,0 +1,25 @@
+name: Create versioned userscript installer
+on:
+  push:
+    paths:
+      - .github/workflows/create-versioned-installer.yml
+permissions:
+  contents: write
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create uncached installer
+        run: cp classroom-rich-publish.user.js classroom-rich-publish-v1.0.7.user.js
+      - name: Validate version
+        run: |
+          grep -q "@version      1.0.7" classroom-rich-publish-v1.0.7.user.js
+          node --check classroom-rich-publish-v1.0.7.user.js
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add classroom-rich-publish-v1.0.7.user.js
+          git diff --cached --quiet || git commit -m "Ajoute un installateur versionné 1.0.7"
+          git push
