@@ -55,6 +55,7 @@ const SUPPLY_PLANS_SHEET = 'PlanificationsSuppleance';
 const APP_MARKER = 'CARDINAL_ROY_PLAN_COURS_V1';
 const GOOGLE_SESSION_KEY = 'cardinal_google_session_v1';
 const LOCAL_PLAN_KEY = 'cardinal_plan_form_state_v2';
+const LOCAL_PLAN_BACKUP_KEY = 'cardinal_plan_form_state_backup_v1';
 const KEEP_FORM_PREF_KEY = 'cardinal_keep_form_filled_v1';
 const PRIVILEGED_EMOJI_EMAIL = 'tremblay.kevin@cscapitale.qc.ca';
 const SUPPLY_PROFILE_PREFIX = 'cardinal_supply_profile_v1_';
@@ -368,12 +369,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Init 3 activities
 function initActivites() {
-  for (let i = 0; i < 3; i++) ajouterActivite();
+  for (let i = 0; i < 3; i++) ajouterActivite('', { skipHistory: true, skipSave: true });
+  sauvegarderPlanLocal();
 }
 
 let draggedActivity = null;
 
-function ajouterActivite(prefillHtml = '') {
+function ajouterActivite(prefillHtml = '', options = {}) {
+  const { skipHistory = false, skipSave = false } = options;
   const list = document.getElementById('activities-list');
   const count = list.children.length;
   if (count >= 10) return;
@@ -400,12 +403,12 @@ function ajouterActivite(prefillHtml = '') {
   if (prefillHtml) editor.innerHTML = prefillHtml;
   editor.addEventListener('focus', () => { activeActivityEditor = editor; });
   editor.addEventListener('click', () => { activeActivityEditor = editor; });
-  pushUndo();
+  if (!skipHistory) pushUndo();
   list.appendChild(row);
   brancherDragActivite(row);
   brancherAutocompleteActivite(row);
   reindexActivites();
-  sauvegarderPlanLocal();
+  if (!skipSave) sauvegarderPlanLocal();
 }
 
 function supprimerActivite(btn) {
@@ -477,7 +480,6 @@ function toggleSansNumero() {
   const hint  = document.getElementById('num-hint');
   input.disabled = cb.checked;
   if (cb.checked) {
-    input.value = '';
     if (hint) hint.style.display = 'none';
   }
   sauvegarderPlanLocal();
@@ -490,7 +492,6 @@ function toggleDevoir() {
   if (cb.checked) {
     ed.setAttribute('disabled-editor', '');
     ed.contentEditable = 'false';
-    ed.innerHTML = '';
   } else {
     ed.removeAttribute('disabled-editor');
     ed.contentEditable = 'true';
@@ -504,7 +505,6 @@ function toggleRappel() {
   if (cb.checked) {
     ed.setAttribute('disabled-editor', '');
     ed.contentEditable = 'false';
-    ed.innerHTML = '';
   } else {
     ed.removeAttribute('disabled-editor');
     ed.contentEditable = 'true';
@@ -539,7 +539,6 @@ function initNumCours() {
     }
   } else if (!input.value.trim()) {
     sansCb.checked = true;
-    input.value = '';
   }
   toggleSansNumero();
 }
@@ -618,7 +617,7 @@ async function generer() {
   planPreview.classList.add('anim');
   clipboardHTML = previewHTML;
   latestGeneratedHtml = previewHTML;
-  latestGeneratedText = buildCurrentPlanTextForClassroom();
+  latestGeneratedText = htmlVersTexteBrutClassroom(previewHTML);
   document.getElementById('btn-copy').style.display = 'flex';
   document.getElementById('btn-reset').style.display = 'flex';
 
@@ -794,7 +793,7 @@ function popUndo() {
   const list = document.getElementById('activities-list');
   list.innerHTML = '';
   _restoringUndo = true;
-  snapshot.forEach(html => ajouterActivite(html));
+  snapshot.forEach(html => ajouterActivite(html, { skipHistory: true, skipSave: true }));
   _restoringUndo = false;
   reindexActivites();
   sauvegarderPlanLocal();
@@ -1245,7 +1244,14 @@ async function refreshBank() {
   if (!googleAccessToken || !appSpreadsheetId) { renderBankList(); return; }
   setStatus('bank-status', 'Chargement de la banque...', '');
   const data = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(ACTIVITES_SHEET+'!A2:E')}`);
-  bankActivities = (data.values || []).map((r, idx) => ({ normalized:r[0] || '', text:r[1] || '', html:r[2] || '', lastUsed:r[3] || '', count:parseInt(r[4] || '0',10) || 0, rowNumber: idx + 2 })).filter(a => a.normalized && a.text);
+  const loadedActivities = (data.values || []).map((r, idx) => ({ normalized:r[0] || '', text:r[1] || '', html:r[2] || '', lastUsed:r[3] || '', count:parseInt(r[4] || '0',10) || 0, rowNumber: idx + 2 })).filter(a => a.normalized && a.text);
+  loadedActivities.sort((a,b) => (b.lastUsed || '').localeCompare(a.lastUsed || ''));
+  const seenActivities = new Set();
+  bankActivities = loadedActivities.filter(activity => {
+    if (seenActivities.has(activity.normalized)) return false;
+    seenActivities.add(activity.normalized);
+    return true;
+  });
   bankActivities.sort((a,b) => (a.text || '').localeCompare(b.text || '', 'fr'));
   renderBankList();
   setStatus('bank-status', bankActivities.length ? `${bankActivities.length} activité(s) en banque.` : 'Aucune activité enregistrée pour le moment.', 'ok');
@@ -1280,7 +1286,7 @@ function fillFormFromCourseState(state) {
 
   document.querySelectorAll('.activity-row').forEach(r => r.remove());
   const activities = Array.isArray(state.activities) && state.activities.length ? state.activities : [''];
-  activities.forEach(html => ajouterActivite(html || ''));
+  activities.forEach(html => ajouterActivite(html || '', { skipHistory: true, skipSave: true }));
 
   document.getElementById('devoir').innerHTML = state.devoirHtml || '';
   document.getElementById('rappel').innerHTML = state.rappelHtml || '';
@@ -1312,7 +1318,7 @@ async function refreshCourses() {
     return;
   }
   const data = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(COURSES_SHEET+'!A2:M')}`);
-  savedCourses = (data.values || []).map((r, idx) => ({
+  const loadedCourses = (data.values || []).map((r, idx) => ({
     id: r[0] || '',
     title: r[1] || '',
     dateDisplay: r[2] || '',
@@ -1328,10 +1334,17 @@ async function refreshCourses() {
     updatedAt: r[12] || '',
     rowNumber: idx + 2
   })).filter(c => c.id && c.title);
-  savedCourses.sort((a, b) => {
+  loadedCourses.sort((a, b) => {
     const diff = getCourseSortTimestamp(b) - getCourseSortTimestamp(a);
     if (diff !== 0) return diff;
     return (b.rowNumber || 0) - (a.rowNumber || 0);
+  });
+  const seenCourseIdentities = new Set();
+  savedCourses = loadedCourses.filter(course => {
+    const identity = normalizeActivity(course.title);
+    if (!identity || seenCourseIdentities.has(identity)) return false;
+    seenCourseIdentities.add(identity);
+    return true;
   });
   renderCourseOptions();
 }
@@ -1403,12 +1416,19 @@ async function refreshSupplyPlans() {
   }
   await refreshSheetMetadata();
   const data = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(SUPPLY_PLANS_SHEET+'!A2:D')}`);
-  savedSupplyPlans = (data.values || []).map((r, idx) => {
+  const loadedSupplyPlans = (data.values || []).map((r, idx) => {
     let payload = {};
     try { payload = JSON.parse(r[3] || '{}'); } catch { payload = {}; }
     return { id: r[0] || '', title: r[1] || '', updatedAt: r[2] || '', payload, rowNumber: idx + 2 };
   }).filter(p => p.id && p.title);
-  savedSupplyPlans.sort((a,b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  loadedSupplyPlans.sort((a,b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+  const seenSupplyIdentities = new Set();
+  savedSupplyPlans = loadedSupplyPlans.filter(plan => {
+    const identity = normalizeActivity(plan.title);
+    if (!identity || seenSupplyIdentities.has(identity)) return false;
+    seenSupplyIdentities.add(identity);
+    return true;
+  });
   renderSupplyPlanOptions();
 }
 
@@ -1469,23 +1489,22 @@ async function saveSupplyPlan() {
   const course = getCurrentCourseState();
   const title = `${supply['supply-date'] || course.dateDisplay || 'Sans date'} - P${supply['supply-period'] || '?'} - Groupe ${supply['supply-group'] || '?'}`;
   saveSupplyProfileForCurrentUser();
-  const id = currentLoadedSupplyId || crypto.randomUUID();
+  const identity = normalizeActivity(title);
+  let target = savedSupplyPlans.find(plan => plan.id === currentLoadedSupplyId && normalizeActivity(plan.title) === identity) || null;
+  if (!target) target = savedSupplyPlans.find(plan => normalizeActivity(plan.title) === identity) || null;
+  const id = target?.id || crypto.randomUUID();
   const values = [[id, title, new Date().toISOString(), JSON.stringify({ courseState: course, supplyState: supply })]];
 
-  if (currentLoadedSupplyId) {
-    const data = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(SUPPLY_PLANS_SHEET+'!A2:A')}`);
-    const rows = data.values || [];
-    const idx = rows.findIndex(r => (r[0] || '') === currentLoadedSupplyId);
-    if (idx >= 0) {
-      const rowNumber = idx + 2;
-      await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(SUPPLY_PLANS_SHEET+'!A'+rowNumber+':D'+rowNumber)}?valueInputOption=USER_ENTERED`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ values })
-      });
-      await refreshSupplyPlans();
-      const sel = document.getElementById('reuse-supply-select');
-      if (sel) sel.value = id;
-      return;
-    }
+  if (target?.rowNumber) {
+    const rowNumber = target.rowNumber;
+    await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(SUPPLY_PLANS_SHEET+'!A'+rowNumber+':D'+rowNumber)}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ values })
+    });
+    currentLoadedSupplyId = id;
+    await refreshSupplyPlans();
+    const sel = document.getElementById('reuse-supply-select');
+    if (sel) sel.value = id;
+    return;
   }
   await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(SUPPLY_PLANS_SHEET+'!A:D')}:append?valueInputOption=USER_ENTERED`, {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ values })
@@ -1544,7 +1563,10 @@ async function saveCurrentCourseToBank() {
   if (!googleAccessToken || !appSpreadsheetId) return;
   const state = getCurrentCourseState();
   const title = buildCourseTitleWithoutEmojis(state);
-  const id = currentLoadedCourseId || crypto.randomUUID();
+  const identity = normalizeActivity(title);
+  let target = savedCourses.find(course => course.id === currentLoadedCourseId && normalizeActivity(course.title) === identity) || null;
+  if (!target) target = savedCourses.find(course => normalizeActivity(course.title) === identity) || null;
+  const id = target?.id || crypto.randomUUID();
   const values = [[
     id, title, state.dateDisplay, state.dateISO, state.courseNumber,
     String(state.sansNumero), String(state.avecEmojis),
@@ -1552,20 +1574,16 @@ async function saveCurrentCourseToBank() {
     state.rappelHtml, String(state.pasRappel), new Date().toISOString()
   ]];
 
-  if (currentLoadedCourseId) {
-    const data = await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(COURSES_SHEET+'!A2:M')}`);
-    const rows = data.values || [];
-    const idx = rows.findIndex(r => (r[0] || '') === currentLoadedCourseId);
-    if (idx >= 0) {
-      const rowNumber = idx + 2;
-      await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(COURSES_SHEET+'!A'+rowNumber+':M'+rowNumber)}?valueInputOption=USER_ENTERED`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ values })
-      });
-      await refreshCourses();
-      const select = document.getElementById('reuse-course-select');
-      if (select) select.value = currentLoadedCourseId;
-      return;
-    }
+  if (target?.rowNumber) {
+    const rowNumber = target.rowNumber;
+    await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(COURSES_SHEET+'!A'+rowNumber+':M'+rowNumber)}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ values })
+    });
+    currentLoadedCourseId = id;
+    await refreshCourses();
+    const select = document.getElementById('reuse-course-select');
+    if (select) select.value = id;
+    return;
   }
   await apiFetch(`https://sheets.googleapis.com/v4/spreadsheets/${appSpreadsheetId}/values/${encodeURIComponent(COURSES_SHEET+'!A:M')}:append?valueInputOption=USER_ENTERED`, {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ values })
@@ -1796,6 +1814,7 @@ async function saveActivitiesToBank(entries) {
   await refreshBank();
 }
 const QUICK_CLASSROOM_GROUPS = ['31', '32', '51'];
+let quickClassroomPublishInProgress = false;
 
 function classroomCourseScoreGroup(course, group) {
   const raw = `${course?.name || ''} ${course?.section || ''}`
@@ -1803,8 +1822,8 @@ function classroomCourseScoreGroup(course, group) {
   const g = String(group || '').trim();
   if (!g) return 0;
   const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (new RegExp(`\bGROUPE\s*[-–—:]?\s*${escaped}\b`).test(raw)) return 120;
-  if (new RegExp(`\b(?:FRA|FRANCAIS|SAE)[^\n]{0,30}(?:-|\s)${escaped}\b`).test(raw)) return 90;
+  if (new RegExp(`\\bGROUPE\\s*[-–—:]?\\s*${escaped}\\b`).test(raw)) return 120;
+  if (new RegExp(`\\b(?:FRA|FRANCAIS|SAE)[^\\n]{0,30}(?:-|\\s)${escaped}\\b`).test(raw)) return 90;
   if (new RegExp(`(?:^|[^0-9])${escaped}(?:[^0-9]|$)`).test(raw)) return 50;
   return 0;
 }
@@ -1841,7 +1860,7 @@ function updateQuickClassroomButtons() {
   }
   const found = QUICK_CLASSROOM_GROUPS.filter(g => getClassroomCourseForGroup(g));
   status.textContent = found.length
-    ? `Groupes prêts : ${found.join(', ')}.`
+    ? `Prêts : ${found.map(g => `${g} → ${getClassroomCourseForGroup(g)?.name || `Groupe ${g}`}`).join(' · ')}`
     : 'Aucun des groupes 31, 32 ou 51 n’a été retrouvé dans les cours Classroom actifs.';
 }
 
@@ -1863,6 +1882,10 @@ async function publishPlanToGroup(group) {
     showToast('Le script Tampermonkey de publication Classroom n’est pas actif.', 'err', 4500);
     return;
   }
+  if (quickClassroomPublishInProgress) {
+    showToast('Une publication Classroom est déjà en préparation.', 'warn', 3000);
+    return;
+  }
 
   const emojiBox = document.getElementById('avec-emojis');
   if (emojiBox) emojiBox.checked = true;
@@ -1872,6 +1895,7 @@ async function publishPlanToGroup(group) {
   if (status) status.textContent = `Préparation du plan pour le groupe ${group}…`;
 
   try {
+    quickClassroomPublishInProgress = true;
     latestGeneratedText = '';
     latestGeneratedHtml = '';
     await generer();
@@ -1905,6 +1929,8 @@ async function publishPlanToGroup(group) {
     updateQuickClassroomButtons();
     if (status) status.textContent = `Échec de préparation pour le groupe ${group}.`;
     showToast('Impossible de préparer le plan pour Classroom.', 'err', 4000);
+  } finally {
+    quickClassroomPublishInProgress = false;
   }
 }
 
@@ -1961,6 +1987,23 @@ function htmlVersTexteClassroom(html) {
   let result = ''; wrapper.childNodes.forEach(child => result += walk(child));
   return result.replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
+
+function htmlVersTexteBrutClassroom(html) {
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = html || '';
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'br') return '\n';
+    let out = '';
+    node.childNodes.forEach(child => { out += walk(child); });
+    return (tag === 'div' || tag === 'p') ? out + '\n\n' : out;
+  }
+  let result = '';
+  wrapper.childNodes.forEach(child => { result += walk(child); });
+  return result.replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().normalize('NFC');
+}
 function buildCurrentPlanTextForClassroom() {
   const sansNumero = document.getElementById('sans-numero').checked; const avecEmojis = document.getElementById('avec-emojis').checked; const num = document.getElementById('num-cours').value.trim(); const date = formatDateStr(dpDate); const emojis = avecEmojis ? (' ' + getEmojis()) : '';
   let texte = sansNumero ? `Cours du ${date}${emojis}\n` : `Cours #${num} (${date})${emojis}\n`;
@@ -2013,7 +2056,8 @@ async function publishToClassroom() {
 
 function getPlanStateForLocal() {
   return {
-    version: 3,
+    version: 4,
+    savedAt: new Date().toISOString(),
     activities: [...document.querySelectorAll('.activity-row .rich-editor')].map(ed => ed.innerHTML),
     devoirHtml: document.getElementById('devoir').innerHTML,
     pasDevoir: document.getElementById('pas-devoir').checked,
@@ -2025,6 +2069,8 @@ function getPlanStateForLocal() {
     sansNumero: !!document.getElementById('sans-numero')?.checked,
     avecEmojis: !!document.getElementById('avec-emojis')?.checked,
     reuseCourseEnabled: !!document.getElementById('enable-reuse-course')?.checked,
+    loadedCourseId: currentLoadedCourseId || '',
+    loadedSupplyId: currentLoadedSupplyId || '',
     currentPlanMode,
     schoolKey: getCurrentSchoolKey(),
     supplyDateISO: sdpDate ? sdpDate.toISOString() : '',
@@ -2040,12 +2086,18 @@ function shouldPersistLocalPlan() {
   const pref = localStorage.getItem(KEEP_FORM_PREF_KEY);
   return pref === null ? true : pref === '1';
 }
+function persistPlanStateNow() {
+  const serialized = JSON.stringify(getPlanStateForLocal());
+  const previous = localStorage.getItem(LOCAL_PLAN_KEY);
+  if (previous) localStorage.setItem(LOCAL_PLAN_BACKUP_KEY, previous);
+  localStorage.setItem(LOCAL_PLAN_KEY, serialized);
+}
 function sauvegarderPlanLocal() {
   clearTimeout(_saveDebounceTimer);
   if (!shouldPersistLocalPlan()) return;
   _saveDebounceTimer = setTimeout(() => {
     try {
-      localStorage.setItem(LOCAL_PLAN_KEY, JSON.stringify(getPlanStateForLocal()));
+      persistPlanStateNow();
       _showSaveIndicator();
     } catch (e) {
       console.warn('sauvegarderPlanLocal', e);
@@ -2062,9 +2114,14 @@ function _showSaveIndicator() {
 
 function restaurerPlanLocal() {
   try {
-    const raw = localStorage.getItem(LOCAL_PLAN_KEY);
-    if (!raw) return;
-    const state = JSON.parse(raw);
+    const candidates = [localStorage.getItem(LOCAL_PLAN_KEY), localStorage.getItem(LOCAL_PLAN_BACKUP_KEY)].filter(Boolean);
+    let state = null;
+    for (const raw of candidates) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') { state = parsed; break; }
+      } catch (_) { /* essayer la sauvegarde précédente */ }
+    }
     if (!state) return;
 
     if (state.schoolKey) applySchoolSelection(state.schoolKey);
@@ -2075,10 +2132,12 @@ function restaurerPlanLocal() {
     document.getElementById('sans-numero').checked = !!state.sansNumero;
     document.getElementById('avec-emojis').checked = state.avecEmojis !== false;
     document.getElementById('enable-reuse-course').checked = !!state.reuseCourseEnabled;
+    currentLoadedCourseId = String(state.loadedCourseId || '');
+    currentLoadedSupplyId = String(state.loadedSupplyId || '');
 
     document.querySelectorAll('.activity-row').forEach(r => r.remove());
     const activities = Array.isArray(state.activities) && state.activities.length ? state.activities : [''];
-    activities.forEach(html => ajouterActivite(html || ''));
+    activities.forEach(html => ajouterActivite(html || '', { skipHistory: true, skipSave: true }));
 
     document.getElementById('devoir').innerHTML = state.devoirHtml || '';
     document.getElementById('pas-devoir').checked = !!state.pasDevoir;
@@ -2123,6 +2182,7 @@ function toggleKeepFormFilled() {
 function effacerPlanLocal() {
   clearTimeout(_saveDebounceTimer);
   localStorage.removeItem(LOCAL_PLAN_KEY);
+  localStorage.removeItem(LOCAL_PLAN_BACKUP_KEY);
 }
 
 
@@ -2138,6 +2198,7 @@ function appendSupplyRule(rule) {
   const lines = ta.value.split(/\n+/).map(v => v.trim()).filter(Boolean);
   if (!lines.includes(rule)) lines.push(rule);
   ta.value = lines.join('\n');
+  sauvegarderPlanLocal();
 }
 function buildSupplyWorkTextFromCourse() {
   let html = '';
@@ -2558,6 +2619,7 @@ function fmt(cmd) {
     sel.addRange(_lastRange);
   }
   document.execCommand(cmd, false, null);
+  sauvegarderPlanLocal();
   hideToolbar();
 }
 
@@ -2761,7 +2823,7 @@ if (reuseSupplySelectEl) reuseSupplySelectEl.addEventListener('change', (e) => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', () => { saveSupplyProfileForCurrentUser(); sauvegarderPlanLocal(); });
 });
-['supply-rules','supply-note','supply-return','supply-room','supply-level','supply-group','supply-period','supply-replacement','supply-date'].forEach(id => {
+['supply-rules','supply-note','supply-return','supply-room','supply-level','supply-group','supply-period','supply-replacement','supply-date','supply-links'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('input', () => { sauvegarderPlanLocal(); });
 });
@@ -2822,7 +2884,7 @@ const maybeConnectSilently = async () => {
 maybeConnectSilently();
 window.addEventListener('beforeunload', () => {
   try {
-    if (shouldPersistLocalPlan()) localStorage.setItem(LOCAL_PLAN_KEY, JSON.stringify(getPlanStateForLocal()));
+    if (shouldPersistLocalPlan()) persistPlanStateNow();
   } catch (e) {
     console.warn('beforeunload save', e);
   }

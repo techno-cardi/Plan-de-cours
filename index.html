@@ -655,8 +655,18 @@
     cursor: pointer;
   }
 
-  .quick-classroom-publish {
+  .quick-classroom-card {
     margin-top: 28px;
+    padding: 14px;
+    border: 1px solid #eaded9;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #fff 0%, #fdf9f7 100%);
+    box-shadow: 0 4px 16px rgba(95, 57, 45, .05);
+  }
+  .quick-classroom-heading { display:flex; flex-direction:column; gap:2px; margin-bottom:10px; }
+  .quick-classroom-heading strong { color:#3d302b; font:700 .92rem 'DM Sans',sans-serif; }
+  .quick-classroom-heading span { color:#8a7c75; font-size:.75rem; line-height:1.35; }
+  .quick-classroom-publish {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 9px;
@@ -675,6 +685,7 @@
   .btn-group-publish:hover:not(:disabled) { background: #a50d24; }
   .btn-group-publish:active:not(:disabled) { transform: scale(.98); }
   .btn-group-publish:disabled { opacity: .38; cursor: not-allowed; }
+  .btn-group-publish:focus-visible { outline:3px solid rgba(196,18,44,.25); outline-offset:2px; }
   #quick-classroom-status {
     min-height: 18px;
     margin-top: 7px;
@@ -1375,13 +1386,19 @@
       </div>
     </div>
 
-    <div class="quick-classroom-publish" id="quick-classroom-publish" aria-label="Publication rapide dans Classroom">
-      <button type="button" class="btn-group-publish" id="btn-publish-group-31" data-group="31" onclick="publishPlanToGroup('31')" disabled>Groupe 31</button>
-      <button type="button" class="btn-group-publish" id="btn-publish-group-32" data-group="32" onclick="publishPlanToGroup('32')" disabled>Groupe 32</button>
-      <button type="button" class="btn-group-publish" id="btn-publish-group-51" data-group="51" onclick="publishPlanToGroup('51')" disabled>Groupe 51</button>
-    </div>
-    <div id="quick-classroom-status">Connectez-vous à Google pour activer la publication en un clic.</div>
-    <div class="save-indicator" id="save-indicator"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span id="save-indicator-text">Sauvegardé</span></div>
+    <section class="quick-classroom-card" aria-labelledby="quick-classroom-title">
+      <div class="quick-classroom-heading">
+        <strong id="quick-classroom-title">Publier le plan dans Classroom</strong>
+        <span>Un clic génère l’aperçu, valide le cours exact et lance la publication riche.</span>
+      </div>
+      <div class="quick-classroom-publish" id="quick-classroom-publish" aria-label="Publication rapide dans Classroom">
+        <button type="button" class="btn-group-publish" id="btn-publish-group-31" data-group="31" onclick="publishPlanToGroup('31')" disabled>Groupe 31</button>
+        <button type="button" class="btn-group-publish" id="btn-publish-group-32" data-group="32" onclick="publishPlanToGroup('32')" disabled>Groupe 32</button>
+        <button type="button" class="btn-group-publish" id="btn-publish-group-51" data-group="51" onclick="publishPlanToGroup('51')" disabled>Groupe 51</button>
+      </div>
+      <div id="quick-classroom-status" role="status" aria-live="polite">Connectez-vous à Google pour activer la publication en un clic.</div>
+    </section>
+    <div class="save-indicator" id="save-indicator" role="status" aria-live="polite"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span id="save-indicator-text">Brouillon sauvegardé</span></div>
     <div id="autosave-status"></div>
     </div>
     <div id="left-plan-supply" style="display:none;"></div>
@@ -1527,8 +1544,19 @@
     <button class="changelog-close" onclick="closeChangelog()" title="Fermer">×</button>
     <h2>Notes de mise à jour</h2>
     <div>
-      <span class="changelog-version-badge">v1.0.13</span>
+      <span class="changelog-version-badge">v1.0.14</span>
       <span class="changelog-date">Août 2026</span>
+    </div>
+
+    <div class="changelog-section">
+      <h3>Publication et sauvegarde renforcées - v1.0.14</h3>
+      <ul>
+        <li><strong>Publication riche vérifiée</strong> : le flux Classroom valide le groupe exact, les trois étapes réseau et la présence visible du plan avant d'annoncer un succès.</li>
+        <li><strong>Aucun double lancement</strong> : les clics rapprochés et les onglets Classroom concurrents ne peuvent plus démarrer deux publications.</li>
+        <li><strong>Champs préservés</strong> : cocher « sans numéro », « pas de devoir » ou « aucun rappel » masque l'information sans l'effacer.</li>
+        <li><strong>Pas de nouveaux doublons</strong> : les cours, planifications et activités identiques sont regroupés et mis à jour de façon idempotente.</li>
+        <li><strong>Sauvegarde de secours</strong> : le brouillon local conserve aussi l'état précédent pour récupérer les champs après une donnée locale endommagée.</li>
+      </ul>
     </div>
 
     <div class="changelog-section">
@@ -1631,7 +1659,7 @@
 
 <footer style="text-align:center;padding:24px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:#aaa;border-top:1px solid #e2ddd8;margin-top:20px;">
   &copy; 2026 Kevin Tremblay &mdash; Équipe des technopédagogues de l'École Cardinal-Roy
-  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.13</button>
+  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.14</button>
   &mdash; <a href="https://raw.githubusercontent.com/techno-cardi/Plan-de-cours/main/Guide%20d'utilisation%20-%20G%C3%A9n%C3%A9rateur%20de%20plan%20de%20cours.pdf" target="_blank" rel="noopener noreferrer" style="color:#aaa;text-decoration:none;font-weight:600;" onmouseover="this.style.color='#C0152A'" onmouseout="this.style.color='#aaa'">📄 Guide d'utilisation</a>
 </footer>
 <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
