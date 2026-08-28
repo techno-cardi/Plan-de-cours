@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Audit statique
+      - name: Audit detaille
         shell: bash
         run: |
           python3 - <<'PY'
@@ -21,72 +21,76 @@ jobs:
           from collections import Counter
           import re, pathlib, hashlib
 
-          p = pathlib.Path('index.html')
-          s = p.read_text(encoding='utf-8')
+          s = pathlib.Path('index.html').read_text(encoding='utf-8')
+          lines = s.splitlines()
 
-          class AuditParser(HTMLParser):
+          class P(HTMLParser):
               def __init__(self):
                   super().__init__(convert_charrefs=True)
-                  self.ids=[]; self.scripts=[]; self.imgs=[]; self.links=[]; self.buttons=[]; self.inputs=[]; self.labels=[]
+                  self.ids=[]; self.scripts=[]; self.buttons=[]; self.forms=[]; self.inputs=[]; self.labels=[]; self.links=[]; self.styles=[]
               def handle_starttag(self, tag, attrs):
                   a=dict(attrs)
                   if 'id' in a: self.ids.append(a['id'])
-                  if tag=='script' and a.get('src'): self.scripts.append(a)
-                  if tag=='img': self.imgs.append(a)
-                  if tag=='a': self.links.append(a)
+                  if tag=='script': self.scripts.append(a)
                   if tag=='button': self.buttons.append(a)
+                  if tag=='form': self.forms.append(a)
                   if tag in ('input','textarea','select'): self.inputs.append((tag,a))
                   if tag=='label': self.labels.append(a)
-          ap=AuditParser(); ap.feed(s)
-          dup_ids=[(k,v) for k,v in Counter(ap.ids).items() if v>1]
-          blank_unsafe=[a.get('href','') for a in ap.links if a.get('target')=='_blank' and 'noopener' not in a.get('rel','')]
-          imgs_no_alt=[a.get('src','') for a in ap.imgs if 'alt' not in a]
-          buttons_no_type=sum(1 for a in ap.buttons if 'type' not in a)
-          script_src=[a.get('src') for a in ap.scripts]
-          inline_scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,flags=re.S|re.I)
-          inline_sizes=sorted((len(x.encode('utf-8')) for x in inline_scripts), reverse=True)
+                  if tag=='a': self.links.append(a)
+          p=P(); p.feed(s)
 
-          patterns = {
-              'innerHTML': r'\.innerHTML\s*=',
-              'insertAdjacentHTML': r'insertAdjacentHTML',
-              'localStorage': r'localStorage',
-              'sessionStorage': r'sessionStorage',
-              'setInterval': r'setInterval\s*\(',
-              'setTimeout': r'setTimeout\s*\(',
-              'fetch': r'fetch\s*\(',
-              'onclick inline': r'\sonclick=',
-              'onmouseover inline': r'\sonmouseover=',
-              'contenteditable': r'contenteditable=',
-              'target blank': r'target=["\']_blank["\']',
-              'console log': r'console\.log\s*\(',
-              'console warn': r'console\.warn\s*\(',
-              'TODO': r'\bTODO\b',
-          }
+          print('=== STRUCTURE ===')
+          print('bytes',len(s.encode()))
+          print('lines',len(lines))
+          print('forms',len(p.forms))
+          print('buttons',len(p.buttons),'without_type',sum('type' not in a for a in p.buttons))
+          print('controls',len(p.inputs),'labels',len(p.labels))
+          print('duplicate_ids',[x for x in Counter(p.ids).items() if x[1]>1])
+          styles=re.findall(r'<style(?:\s[^>]*)?>(.*?)</style>',s,re.S|re.I)
+          print('style_blocks',len(styles),'style_sizes',[len(x.encode()) for x in styles])
+          scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,re.S|re.I)
+          print('inline_script_sizes',sorted([len(x.encode()) for x in scripts],reverse=True))
 
-          print('=== AUDIT PLAN-DE-COURS ===')
-          print('bytes=', len(s.encode('utf-8')))
-          print('lines=', s.count('\n')+1)
-          print('sha256=', hashlib.sha256(s.encode()).hexdigest())
-          print('external_scripts=', len(script_src))
-          for x in script_src: print('SCRIPT', x)
-          print('inline_script_count=', len(inline_scripts))
-          print('largest_inline_scripts_bytes=', inline_sizes[:10])
-          print('ids=', len(ap.ids), 'duplicate_ids=', dup_ids[:30])
-          print('images=',len(ap.imgs),'images_missing_alt=',imgs_no_alt[:30])
-          print('buttons=',len(ap.buttons),'buttons_missing_type=',buttons_no_type)
-          print('controls=',len(ap.inputs),'labels=',len(ap.labels))
-          print('unsafe_target_blank=', blank_unsafe[:50])
-          for name, pat in patterns.items():
-              print(f'{name}=', len(re.findall(pat,s,flags=re.I)))
+          print('\n=== EXTERNAL SCRIPT TAGS ===')
+          for i,l in enumerate(lines,1):
+              if '<script' in l and 'src=' in l: print(i,l.strip())
 
-          versions=sorted(set(re.findall(r'v\d+\.\d+\.\d+',s)))
-          print('versions=', versions)
-          print('smart_quotes_marker=', '<!-- French smart quotes -->' in s)
-          print('smart_quotes_nbsp=', '\u00a0' in s[s.rfind('<!-- French smart quotes -->'):])
-          print('smart_quotes_selection_wrap=', 'selectionStart' in s[s.rfind('<!-- French smart quotes -->'):] and 'setRangeText' in s[s.rfind('<!-- French smart quotes -->'):])
+          print('\n=== PDF GLOBAL USAGE ===')
+          for i,l in enumerate(lines,1):
+              if any(k in l for k in ('html2pdf','html2canvas','window.jspdf','jsPDF')):
+                  print(i,l.strip()[:500])
 
-          # external origins useful for connection/performance review
-          urls=sorted(set(re.findall(r'https://[^\"\'\s<>]+',s)))
-          print('external_url_count=',len(urls))
-          for u in urls[:80]: print('URL',u[:240])
+          print('\n=== BUTTONS WITHOUT TYPE ===')
+          for i,l in enumerate(lines,1):
+              if '<button' in l.lower() and not re.search(r'\btype\s*=',l,re.I): print(i,l.strip()[:500])
+
+          print('\n=== TARGET BLANK ===')
+          for i,l in enumerate(lines,1):
+              if 'target="_blank"' in l or "target='_blank'" in l: print(i,l.strip()[:600])
+
+          print('\n=== VERSION LINES ===')
+          for i,l in enumerate(lines,1):
+              if re.search(r'v\d+\.\d+\.\d+',l): print(i,l.strip()[:500])
+
+          print('\n=== SMART QUOTES ===')
+          start=max(0,next((i for i,l in enumerate(lines) if 'French smart quotes' in l),len(lines)-1)-2)
+          for i in range(start,min(len(lines),start+120)): print(i+1,lines[i][:500])
+
+          print('\n=== SECURITY / DYNAMIC HTML SAMPLE ===')
+          hits=[]
+          for i,l in enumerate(lines,1):
+              if '.innerHTML' in l and '=' in l: hits.append((i,l.strip()[:500]))
+          print('innerHTML_assignments',len(hits))
+          for x in hits[:70]: print(*x)
+
+          print('\n=== DUPLICATE FUNCTION DECLARATIONS ===')
+          names=re.findall(r'\bfunction\s+([A-Za-z_$][\w$]*)\s*\(',s)
+          dups=[x for x in Counter(names).items() if x[1]>1]
+          print('function_declarations',len(names),'duplicates',dups)
+
+          print('\n=== ASSOCIATION LABELS ===')
+          control_ids=[a.get('id') for _,a in p.inputs if a.get('id')]
+          label_for=[a.get('for') for a in p.labels if a.get('for')]
+          print('controls_with_id',len(control_ids),'labels_with_for',len(label_for))
+          print('unlabelled_control_ids',[x for x in control_ids if x not in label_for])
           PY
