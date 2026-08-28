@@ -1,0 +1,92 @@
+name: Audit temporaire du generateur
+
+on:
+  push:
+    paths:
+      - '.github/workflows/audit-optimize.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit statique
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from collections import Counter
+          import re, pathlib, hashlib
+
+          p = pathlib.Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          class AuditParser(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.ids=[]; self.scripts=[]; self.imgs=[]; self.links=[]; self.buttons=[]; self.inputs=[]; self.labels=[]
+              def handle_starttag(self, tag, attrs):
+                  a=dict(attrs)
+                  if 'id' in a: self.ids.append(a['id'])
+                  if tag=='script' and a.get('src'): self.scripts.append(a)
+                  if tag=='img': self.imgs.append(a)
+                  if tag=='a': self.links.append(a)
+                  if tag=='button': self.buttons.append(a)
+                  if tag in ('input','textarea','select'): self.inputs.append((tag,a))
+                  if tag=='label': self.labels.append(a)
+          ap=AuditParser(); ap.feed(s)
+          dup_ids=[(k,v) for k,v in Counter(ap.ids).items() if v>1]
+          blank_unsafe=[a.get('href','') for a in ap.links if a.get('target')=='_blank' and 'noopener' not in a.get('rel','')]
+          imgs_no_alt=[a.get('src','') for a in ap.imgs if 'alt' not in a]
+          buttons_no_type=sum(1 for a in ap.buttons if 'type' not in a)
+          script_src=[a.get('src') for a in ap.scripts]
+          inline_scripts=re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',s,flags=re.S|re.I)
+          inline_sizes=sorted((len(x.encode('utf-8')) for x in inline_scripts), reverse=True)
+
+          patterns = {
+              'innerHTML': r'\.innerHTML\s*=',
+              'insertAdjacentHTML': r'insertAdjacentHTML',
+              'localStorage': r'localStorage',
+              'sessionStorage': r'sessionStorage',
+              'setInterval': r'setInterval\s*\(',
+              'setTimeout': r'setTimeout\s*\(',
+              'fetch': r'fetch\s*\(',
+              'onclick inline': r'\sonclick=',
+              'onmouseover inline': r'\sonmouseover=',
+              'contenteditable': r'contenteditable=',
+              'target blank': r'target=["\']_blank["\']',
+              'console log': r'console\.log\s*\(',
+              'console warn': r'console\.warn\s*\(',
+              'TODO': r'\bTODO\b',
+          }
+
+          print('=== AUDIT PLAN-DE-COURS ===')
+          print('bytes=', len(s.encode('utf-8')))
+          print('lines=', s.count('\n')+1)
+          print('sha256=', hashlib.sha256(s.encode()).hexdigest())
+          print('external_scripts=', len(script_src))
+          for x in script_src: print('SCRIPT', x)
+          print('inline_script_count=', len(inline_scripts))
+          print('largest_inline_scripts_bytes=', inline_sizes[:10])
+          print('ids=', len(ap.ids), 'duplicate_ids=', dup_ids[:30])
+          print('images=',len(ap.imgs),'images_missing_alt=',imgs_no_alt[:30])
+          print('buttons=',len(ap.buttons),'buttons_missing_type=',buttons_no_type)
+          print('controls=',len(ap.inputs),'labels=',len(ap.labels))
+          print('unsafe_target_blank=', blank_unsafe[:50])
+          for name, pat in patterns.items():
+              print(f'{name}=', len(re.findall(pat,s,flags=re.I)))
+
+          versions=sorted(set(re.findall(r'v\d+\.\d+\.\d+',s)))
+          print('versions=', versions)
+          print('smart_quotes_marker=', '<!-- French smart quotes -->' in s)
+          print('smart_quotes_nbsp=', '\u00a0' in s[s.rfind('<!-- French smart quotes -->'):])
+          print('smart_quotes_selection_wrap=', 'selectionStart' in s[s.rfind('<!-- French smart quotes -->'):] and 'setRangeText' in s[s.rfind('<!-- French smart quotes -->'):])
+
+          # external origins useful for connection/performance review
+          urls=sorted(set(re.findall(r'https://[^\"\'\s<>]+',s)))
+          print('external_url_count=',len(urls))
+          for u in urls[:80]: print('URL',u[:240])
+          PY
