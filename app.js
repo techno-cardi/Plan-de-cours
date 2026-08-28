@@ -604,23 +604,11 @@ async function generer() {
   if (pasDevoir) {
     previewHTML += `<p class="special"><b>Devoir(s) :</b> <b>Aucun devoir</b></p>`;
   } else if (devoirText) {
-    const lines = richToLines(devoirHTML);
-    if (lines.length <= 1) {
-      previewHTML += `<p class="special"><b>Devoir(s) :</b> ${sanitizeInlineFragment(lines[0] || '')}</p>`;
-    } else {
-      previewHTML += `<p class="special"><b>Devoir(s) :</b></p>`;
-      for (let i = 0; i < lines.length; i++) previewHTML += `<p style="margin-left:1.8em">${sanitizeInlineFragment(lines[i])}</p>`;
-    }
+    previewHTML += buildSpecialPreview('Devoir(s)', devoirHTML);
   }
 
   if (!pasRappel && rappelText) {
-    const lines = richToLines(rappelHTML);
-    if (lines.length <= 1) {
-      previewHTML += `<p class="special"><b>Rappel(s) :</b> ${sanitizeInlineFragment(lines[0] || '')}</p>`;
-    } else {
-      previewHTML += `<p class="special"><b>Rappel(s) :</b></p>`;
-      for (let i = 0; i < lines.length; i++) previewHTML += `<p style="margin-left:1.8em">${sanitizeInlineFragment(lines[i])}</p>`;
-    }
+    previewHTML += buildSpecialPreview('Rappel(s)', rappelHTML);
   }
 
   const planPreview = document.getElementById('plan-preview');
@@ -674,6 +662,70 @@ function richToLines(html) {
   // Split, trim, and drop empty lines
   const lines = normalized.split('\n').map(l => l.trim()).filter(l => l.replace(/<[^>]*>/g,'').trim().length > 0);
   return lines.length > 0 ? lines : [''];
+}
+function richToStructuredLines(html) {
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = html || '';
+  const lines = [];
+
+  function hasVisibleText(fragment) {
+    const probe = document.createElement('div');
+    probe.innerHTML = fragment || '';
+    return (probe.textContent || '').replace(/\u00a0/g, ' ').trim().length > 0;
+  }
+  function push(kind, fragment, number = null) {
+    const clean = sanitizeInlineFragment(fragment || '');
+    if (hasVisibleText(clean)) lines.push({ kind, html: clean, number });
+  }
+  function processList(list, ordered) {
+    let n = parseInt(list.getAttribute('start') || '1', 10);
+    if (!Number.isFinite(n)) n = 1;
+    Array.from(list.children).forEach(child => {
+      if (child.tagName?.toLowerCase() !== 'li') return;
+      const clone = child.cloneNode(true);
+      clone.querySelectorAll(':scope > ul, :scope > ol').forEach(nested => nested.remove());
+      push(ordered ? 'number' : 'bullet', clone.innerHTML, ordered ? n++ : null);
+      Array.from(child.children).forEach(nested => {
+        const tag = nested.tagName?.toLowerCase();
+        if (tag === 'ul') processList(nested, false);
+        if (tag === 'ol') processList(nested, true);
+      });
+    });
+  }
+  function process(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.nodeValue || '').trim()) push('text', esc(node.nodeValue || ''));
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'ul') { processList(node, false); return; }
+    if (tag === 'ol') { processList(node, true); return; }
+    if (tag === 'div' || tag === 'p') {
+      const directLists = Array.from(node.children).filter(c => ['ul','ol'].includes(c.tagName.toLowerCase()));
+      if (!directLists.length) { push('text', node.innerHTML); return; }
+      Array.from(node.childNodes).forEach(process);
+      return;
+    }
+    if (tag === 'br') return;
+    push('text', node.outerHTML);
+  }
+  Array.from(wrapper.childNodes).forEach(process);
+  return lines;
+}
+
+function buildSpecialPreview(label, html) {
+  const lines = richToStructuredLines(html);
+  if (!lines.length) return '';
+  if (lines.length === 1 && lines[0].kind === 'text') {
+    return `<p class="special"><b>${label} :</b> ${lines[0].html}</p>`;
+  }
+  let out = `<p class="special"><b>${label} :</b></p>`;
+  lines.forEach(line => {
+    const prefix = line.kind === 'bullet' ? '- ' : (line.kind === 'number' ? `${line.number}. ` : '');
+    out += `<p style="margin-left:1.8em">${prefix}${line.html}</p>`;
+  });
+  return out;
 }
 function sanitizeInlineFragment(html) {
   const wrapper = document.createElement('div');
@@ -1755,11 +1807,37 @@ async function loadClassroomCourses() {
 function htmlVersTexteClassroom(html) {
   const wrapper = document.createElement('div'); wrapper.innerHTML = html || '';
   function underlineUnicode(s) { return Array.from(s).map(ch => (ch === ' ' || ch === '\n' || ch === '\t') ? ch : ch + '\u0332').join(''); }
+  function walkChildren(node) {
+    let out = '';
+    node.childNodes.forEach(child => { out += walk(child); });
+    return out;
+  }
   function walk(node) {
     if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
     if (node.nodeType !== Node.ELEMENT_NODE) return '';
-    const tag = node.tagName.toLowerCase(); if (tag === 'br') return '\n';
-    let out = ''; node.childNodes.forEach(child => out += walk(child));
+    const tag = node.tagName.toLowerCase();
+    if (tag === 'br') return '\n';
+    if (tag === 'ul' || tag === 'ol') {
+      let number = parseInt(node.getAttribute('start') || '1', 10);
+      if (!Number.isFinite(number)) number = 1;
+      let listText = '';
+      Array.from(node.children).forEach(li => {
+        if (li.tagName?.toLowerCase() !== 'li') return;
+        let itemText = '';
+        li.childNodes.forEach(child => {
+          if (child.nodeType === Node.ELEMENT_NODE && ['ul','ol'].includes(child.tagName.toLowerCase())) return;
+          itemText += walk(child);
+        });
+        itemText = itemText.replace(/\n+/g, ' ').trim();
+        if (itemText) listText += (tag === 'ul' ? '- ' : `${number++}. `) + itemText + '\n';
+        Array.from(li.children).forEach(child => {
+          const childTag = child.tagName?.toLowerCase();
+          if (childTag === 'ul' || childTag === 'ol') listText += walk(child);
+        });
+      });
+      return listText;
+    }
+    let out = walkChildren(node);
     if (tag === 'u') out = underlineUnicode(out);
     if (tag === 'div' || tag === 'p') return out + '\n';
     return out;
@@ -2367,6 +2445,27 @@ function fmt(cmd) {
   hideToolbar();
 }
 
+function formatEditorList(editorId, type) {
+  const editor = document.getElementById(editorId);
+  if (!editor || editor.contentEditable === 'false') return;
+  const sel = window.getSelection();
+  const currentRange = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  const anchor = currentRange ? (currentRange.commonAncestorContainer.nodeType === Node.ELEMENT_NODE ? currentRange.commonAncestorContainer : currentRange.commonAncestorContainer.parentElement) : null;
+  const selectionIsInside = !!(anchor && editor.contains(anchor));
+  if (!selectionIsInside) {
+    editor.focus();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  document.execCommand(type === 'ordered' ? 'insertOrderedList' : 'insertUnorderedList', false, null);
+  editor.focus();
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+  sauvegarderPlanLocal();
+}
+
 const toolbar = document.getElementById('format-toolbar');
 
 function showToolbar(rect) {
@@ -2413,7 +2512,9 @@ async function copier() {
   // Method 1 — ClipboardItem API (Chrome / Edge)
   try {
     const blob = new Blob([clipboardHTML], { type: 'text/html' });
-    await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+    const plainText = htmlVersTexteClassroom(clipboardHTML);
+    const plainBlob = new Blob([plainText], { type: 'text/plain' });
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': plainBlob })]);
     afficherCopie();
     return;
   } catch(e) { /* fall through */ }

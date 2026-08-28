@@ -1163,6 +1163,33 @@
     .plan-mode-toggle { width:100%; justify-content:flex-end; }
   }
 
+
+  /* Listes dans les éditeurs de devoirs et rappels */
+  .list-format-tools {
+    display:flex;
+    gap:6px;
+    align-items:center;
+    margin-top:7px;
+    margin-bottom:2px;
+    flex-wrap:wrap;
+  }
+  .list-format-btn {
+    border:1px solid #ddd6cf;
+    background:#faf8f5;
+    color:#5f554d;
+    border-radius:7px;
+    padding:5px 9px;
+    font:600 0.76rem 'DM Sans',sans-serif;
+    cursor:pointer;
+    line-height:1.2;
+  }
+  .list-format-btn:hover { border-color:#c8102e; color:#c8102e; background:#fff; }
+  .list-format-btn:focus-visible { outline:2px solid #c8102e; outline-offset:2px; }
+  .rich-editor ul { list-style:none; padding-left:1.25em; margin:0.3em 0; }
+  .rich-editor ul > li::before { content:'- '; margin-left:-1.05em; }
+  .rich-editor ol { padding-left:1.65em; margin:0.3em 0; }
+  .rich-editor li { margin:0.12em 0; }
+
 </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>window.___gcfg = { parsetags: 'explicit' };</script>
@@ -1293,6 +1320,10 @@
     <div class="special-field">
       <label for="devoir">Devoir(s)</label>
       <div class="rich-editor" id="devoir" contenteditable="true" data-placeholder="Terminer son paragraphe et la correction complète pour demain" spellcheck="true"></div>
+      <div class="list-format-tools" aria-label="Mise en forme des listes">
+        <button type="button" class="list-format-btn" onmousedown="event.preventDefault(); formatEditorList('devoir','unordered')" title="Créer ou retirer une liste à tirets">- Liste à tirets</button>
+        <button type="button" class="list-format-btn" onmousedown="event.preventDefault(); formatEditorList('devoir','ordered')" title="Créer ou retirer une liste numérotée">1. Liste numérotée</button>
+      </div>
       <div class="checkbox-row">
         <input type="checkbox" id="pas-devoir" onchange="toggleDevoir()">
         <span onclick="document.getElementById('pas-devoir').click()">Pas de devoir</span>
@@ -1303,6 +1334,10 @@
     <div class="special-field">
       <label for="rappel">Rappel(s) <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.75rem;color:#bbb;">(optionnel)</span></label>
       <div class="rich-editor" id="rappel" contenteditable="true" data-placeholder="Examen final sur le roman Entre chiens et loups lundi…" spellcheck="true"></div>
+      <div class="list-format-tools" aria-label="Mise en forme des listes">
+        <button type="button" class="list-format-btn" onmousedown="event.preventDefault(); formatEditorList('rappel','unordered')" title="Créer ou retirer une liste à tirets">- Liste à tirets</button>
+        <button type="button" class="list-format-btn" onmousedown="event.preventDefault(); formatEditorList('rappel','ordered')" title="Créer ou retirer une liste numérotée">1. Liste numérotée</button>
+      </div>
       <div class="checkbox-row">
         <input type="checkbox" id="pas-rappel" onchange="toggleRappel()">
         <span onclick="document.getElementById('pas-rappel').click()">Aucun rappel</span>
@@ -1456,8 +1491,17 @@
     <button class="changelog-close" onclick="closeChangelog()" title="Fermer">×</button>
     <h2>Notes de mise à jour</h2>
     <div>
-      <span class="changelog-version-badge">v1.0.10</span>
+      <span class="changelog-version-badge">v1.0.11</span>
       <span class="changelog-date">Août 2026</span>
+    </div>
+
+    <div class="changelog-section">
+      <h3>Listes propres - v1.0.11</h3>
+      <ul>
+        <li><strong>Listes à tirets</strong> : les devoirs et rappels peuvent être organisés avec des tirets simples qui restent propres après la génération et le copier-coller.</li>
+        <li><strong>Listes numérotées</strong> : une sélection de plusieurs lignes peut être convertie en liste 1, 2, 3 en un clic.</li>
+        <li><strong>Copie compatible</strong> : le presse-papiers contient maintenant une version HTML et une version texte pour préserver la structure dans davantage de destinations, dont Classroom.</li>
+      </ul>
     </div>
 
     <div class="changelog-section">
@@ -1532,7 +1576,7 @@
 
 <footer style="text-align:center;padding:24px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:#aaa;border-top:1px solid #e2ddd8;margin-top:20px;">
   &copy; 2026 Kevin Tremblay &mdash; Équipe des technopédagogues de l'École Cardinal-Roy
-  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.10</button>
+  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.11</button>
   &mdash; <a href="https://raw.githubusercontent.com/techno-cardi/Plan-de-cours/main/Guide%20d'utilisation%20-%20G%C3%A9n%C3%A9rateur%20de%20plan%20de%20cours.pdf" target="_blank" rel="noopener noreferrer" style="color:#aaa;text-decoration:none;font-weight:600;" onmouseover="this.style.color='#C0152A'" onmouseout="this.style.color='#aaa'">📄 Guide d'utilisation</a>
 </footer>
 <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
