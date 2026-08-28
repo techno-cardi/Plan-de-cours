@@ -16,10 +16,10 @@ jobs:
       - name: Valider les points critiques
         run: |
           grep -q '@version      1.0.0' classroom-paste-diagnostic-v1.0.0.user.js
-          grep -q "addEventListener('paste'" classroom-paste-diagnostic-v1.0.0.user.js
-          grep -q "beforeinput" classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "'paste','beforeinput','input'" classroom-paste-diagnostic-v1.0.0.user.js
           grep -q "isTrusted" classroom-paste-diagnostic-v1.0.0.user.js
           grep -q "clipboardData" classroom-paste-diagnostic-v1.0.0.user.js
           grep -q "MutationObserver" classroom-paste-diagnostic-v1.0.0.user.js
           grep -q "publishButton" classroom-paste-diagnostic-v1.0.0.user.js
           grep -q "GM_setClipboard(text, 'text')" classroom-paste-diagnostic-v1.0.0.user.js
+          grep -q "Diagnostic - copier le plan" classroom-paste-diagnostic-v1.0.0.user.js
