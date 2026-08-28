@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Plan de cours - Publication riche Classroom
 // @namespace    https://github.com/techno-cardi/Plan-de-cours
-// @version      1.0.4
+// @version      1.0.5
 // @description  Copie le plan avec sa mise en forme, ouvre le bon groupe Classroom et publie automatiquement l'annonce.
 // @author       techno-cardi
 // @match        https://techno-cardi.github.io/Plan-de-cours/*
@@ -349,6 +349,12 @@
     }) || null;
   }
 
+  function resolveEditableElement(el) {
+    if (!el) return null;
+    if (el.matches?.('[contenteditable="true"]')) return el;
+    return el.querySelector?.('[contenteditable="true"]') || null;
+  }
+
   function findAnnouncementSurface() {
     const promptMatches = value => {
       const txt = foldText(value);
@@ -371,7 +377,7 @@
       for (let i = 0; i < 14 && root; i++, root = root.parentElement) {
         const descriptor = `${root.textContent || ''} ${root.getAttribute?.('aria-label') || ''} ${root.getAttribute?.('data-placeholder') || ''}`;
         if (promptMatches(descriptor) && hasAnnouncementActions(root)) {
-          return { root, editor };
+          return { root, editor: resolveEditableElement(editor) || editor };
         }
       }
     }
@@ -384,7 +390,7 @@
       let root = label;
       for (let i = 0; i < 14 && root; i++, root = root.parentElement) {
         const editor = Array.from(root.querySelectorAll('[contenteditable="true"],[role="textbox"]')).find(visible);
-        if (editor && hasAnnouncementActions(root)) return { root, editor };
+        if (editor && hasAnnouncementActions(root)) return { root, editor: resolveEditableElement(editor) || editor };
       }
     }
     return null;
@@ -394,32 +400,152 @@
     return findAnnouncementSurface()?.editor || null;
   }
 
-  function insertRichHtml(editor, html, expectedText) {
-    editor.focus();
+  function selectEditorContents(editor) {
     const sel = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(editor);
     sel.removeAllRanges();
     sel.addRange(range);
+  }
 
-    let ok = false;
-    try { ok = document.execCommand('insertHTML', false, html); }
-    catch (_) { ok = false; }
+  function clearEditorNative(editor) {
+    try {
+      editor.focus();
+      selectEditorContents(editor);
+      document.execCommand('delete', false, null);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 
-    if (!ok || !norm(editor.innerText || editor.textContent).includes(norm(expectedText).slice(0, 45))) {
-      try {
-        editor.innerHTML = html;
-        editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: null }));
-        editor.dispatchEvent(new Event('change', { bubbles: true }));
-      } catch (_) { /* verification below decides */ }
-    } else {
-      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: null }));
+  function htmlToEditorRuns(html) {
+    const box = document.createElement('div');
+    box.innerHTML = html || '';
+    const runs = [];
+    const blockTags = new Set(['P','DIV','LI','H1','H2','H3','H4','H5','H6','BLOCKQUOTE']);
+
+    const push = (text, state) => {
+      if (!text) return;
+      runs.push({ text, bold: !!state.bold, italic: !!state.italic, underline: !!state.underline });
+    };
+
+    const walk = (node, state) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        push(node.nodeValue || '', state);
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const tag = node.tagName;
+      if (tag === 'BR') {
+        push('\n', state);
+        return;
+      }
+      const next = {
+        bold: state.bold || tag === 'B' || tag === 'STRONG',
+        italic: state.italic || tag === 'I' || tag === 'EM',
+        underline: state.underline || tag === 'U'
+      };
+      const beforeCount = runs.length;
+      Array.from(node.childNodes).forEach(child => walk(child, next));
+      if (blockTags.has(tag) && runs.length > beforeCount) {
+        const last = runs[runs.length - 1];
+        if (!last.text.endsWith('\n')) push('\n', next);
+      }
+    };
+
+    Array.from(box.childNodes).forEach(child => walk(child, { bold:false, italic:false, underline:false }));
+    while (runs.length && runs[runs.length - 1].text === '\n') runs.pop();
+    return runs;
+  }
+
+  function insertRunsWithExecCommand(editor, html) {
+    const runs = htmlToEditorRuns(html);
+    if (!runs.length) return false;
+    editor.focus();
+    clearEditorNative(editor);
+
+    let state = { bold:false, italic:false, underline:false };
+    const setState = (name, desired) => {
+      if (state[name] === desired) return;
+      try { document.execCommand(name, false, null); state[name] = desired; } catch (_) {}
+    };
+
+    for (const run of runs) {
+      setState('bold', run.bold);
+      setState('italic', run.italic);
+      setState('underline', run.underline);
+      const parts = String(run.text).split('\n');
+      parts.forEach((part, index) => {
+        if (part) document.execCommand('insertText', false, part);
+        if (index < parts.length - 1) {
+          if (!document.execCommand('insertLineBreak', false, null)) {
+            document.execCommand('insertText', false, '\n');
+          }
+        }
+      });
     }
 
-    const actual = norm(editor.innerText || editor.textContent);
+    setState('bold', false);
+    setState('italic', false);
+    setState('underline', false);
+    return true;
+  }
+
+  function dispatchRichPaste(editor, html, text) {
+    try {
+      const data = new DataTransfer();
+      data.setData('text/html', html);
+      data.setData('text/plain', text);
+      const event = new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clipboardData: data
+      });
+      editor.focus();
+      return editor.dispatchEvent(event) === false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function insertRichHtml(editor, html, expectedText) {
+    editor = resolveEditableElement(editor) || editor;
+    if (!editor || editor.getAttribute?.('contenteditable') !== 'true') {
+      console.warn('[Plan de cours → Classroom] Élément non contenteditable:', editor);
+      return false;
+    }
+
     const expected = norm(expectedText);
     const signature = expected.slice(0, Math.min(70, expected.length));
-    return signature.length >= 10 && actual.includes(signature);
+    const matches = () => {
+      const actual = norm(editor.innerText || editor.textContent);
+      return signature.length >= 10 && actual.includes(signature);
+    };
+
+    editor.scrollIntoView?.({ block:'center' });
+    editor.focus();
+    clearEditorNative(editor);
+
+    dispatchRichPaste(editor, html, expectedText);
+    await sleep(180);
+    if (matches()) return true;
+
+    clearEditorNative(editor);
+    try { document.execCommand('insertHTML', false, html); } catch (_) {}
+    await sleep(120);
+    if (matches()) return true;
+
+    clearEditorNative(editor);
+    try { insertRunsWithExecCommand(editor, html); } catch (err) {
+      console.warn('[Plan de cours → Classroom] Insertion native échouée:', err);
+    }
+    await sleep(180);
+    if (matches()) return true;
+
+    console.warn('[Plan de cours → Classroom] Insertion refusée. Éditeur:', editor, 'contenu observé:', editor.innerText || editor.textContent);
+    return false;
   }
 
   function findPostButton(editor, allowDisabled = false) {
@@ -516,7 +642,7 @@
     }
 
     const editor = surface.editor;
-    const inserted = insertRichHtml(editor, pending.html, pending.text);
+    const inserted = await insertRichHtml(editor, pending.html, pending.text);
     if (!inserted) {
       console.warn('[Plan de cours → Classroom] Mauvais éditeur évité. Panneau annonce détecté:', surface.root, 'éditeur:', editor);
       showClassroomFallback('La bonne fenêtre « Annonce » est ouverte, mais Classroom a refusé l’insertion riche automatique.');
