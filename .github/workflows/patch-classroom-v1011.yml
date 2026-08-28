@@ -1,0 +1,70 @@
+name: Correctif RPC Classroom v1.0.11
+on:
+  push:
+    paths:
+      - .github/patch-classroom-v1011.py
+      - .github/workflows/patch-classroom-v1011.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Appliquer le correctif
+        run: python .github/patch-classroom-v1011.py
+      - name: Valider JavaScript
+        run: |
+          node --check classroom-rich-publish.user.js
+          grep -q '@version      1.0.11' classroom-rich-publish.user.js
+          grep -q 'const CLASSROOM_SAVE_TEMPLATE' classroom-rich-publish.user.js
+          grep -q "'x-same-domain': '1'" classroom-rich-publish.user.js
+          grep -q "pending.rpcStage = 'saved'" classroom-rich-publish.user.js
+          grep -q "state !== 3" classroom-rich-publish.user.js
+      - name: Valider les trois modèles RPC
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const src = fs.readFileSync('classroom-rich-publish.user.js','utf8');
+          function arr(name) {
+            const re = new RegExp(`const ${name} = (\\[.*?\\]);`, 's');
+            const m = src.match(re);
+            if (!m) throw new Error(`${name} introuvable`);
+            return Function(`return (${m[1]})`)();
+          }
+          const create = arr('CLASSROOM_CREATE_TEMPLATE');
+          const save = arr('CLASSROOM_SAVE_TEMPLATE');
+          const publish = arr('CLASSROOM_PUBLISH_TEMPLATE');
+          const c = create[0][0][2][0];
+          const s = save[0][0][2][0];
+          const p = publish[0][0][2][0];
+          if (c[9]?.[0] !== 3) throw new Error('create template invalide');
+          if (s[9]?.[0] !== 2 || s[4] !== null) throw new Error('save template invalide');
+          if (p[8] !== 3 || p[9]?.[0] !== 2) throw new Error('publish template invalide');
+          if (!Array.isArray(s[27]) || s[27][0][6][0] !== 'edu.rt') throw new Error('save rich message invalide');
+          console.log('3 RPC templates OK');
+          NODE
+      - name: Vérifier que le flux automatique ne touche plus à l'éditeur
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('classroom-rich-publish.user.js').read_text(encoding='utf-8')
+          m=re.search(r'async function automateClassroom\(\) \{(.*?)\n  \}\n\n  if \(isPlanPage\)',s,re.S)
+          assert m, 'automateClassroom absent'
+          body=m.group(1)
+          assert 'publishRichViaClassroomRpc' in body
+          assert 'insertRichHtml(' not in body
+          assert 'findNewAnnouncementButton(' not in body
+          assert 'postButton' not in body
+          print('flux RPC uniquement OK')
+          PY
+      - name: Créer installateur versionné
+        run: cp classroom-rich-publish.user.js classroom-rich-publish-v1.0.11.user.js
+      - name: Committer
+        run: |
+          git config user.name "techno-cardi"
+          git config user.email "tremblay.kevin@cscapitale.qc.ca"
+          git add classroom-rich-publish.user.js classroom-rich-publish-v1.0.11.user.js
+          git commit -m "Publie les annonces riches via la séquence RPC Classroom complète" || exit 0
+          git push
