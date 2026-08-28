@@ -1795,6 +1795,97 @@ async function saveActivitiesToBank(entries) {
   await Promise.all(promises);
   await refreshBank();
 }
+const QUICK_CLASSROOM_GROUPS = ['31', '32', '51'];
+
+function classroomCourseMatchesGroup(course, group) {
+  const raw = `${course?.name || ''} ${course?.section || ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  const g = String(group || '').trim();
+  if (!g) return false;
+  const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^0-9])${escaped}(?:[^0-9]|$)`).test(raw);
+}
+
+function getClassroomCourseForGroup(group) {
+  return classroomCourses.find(c => classroomCourseMatchesGroup(c, group)) || null;
+}
+
+function updateQuickClassroomButtons() {
+  QUICK_CLASSROOM_GROUPS.forEach(group => {
+    const btn = document.getElementById(`btn-publish-group-${group}`);
+    if (!btn) return;
+    const course = getClassroomCourseForGroup(group);
+    btn.disabled = !googleAccessToken || !course;
+    btn.dataset.courseId = course?.id ? String(course.id) : '';
+    btn.title = course
+      ? `Publier dans ${course.name}${course.section ? ' - ' + course.section : ''}`
+      : `Aucun cours Classroom actif correspondant au groupe ${group}`;
+  });
+  const status = document.getElementById('quick-classroom-status');
+  if (!status) return;
+  if (!googleAccessToken) {
+    status.textContent = 'Connectez-vous à Google pour activer la publication en un clic.';
+    return;
+  }
+  const found = QUICK_CLASSROOM_GROUPS.filter(g => getClassroomCourseForGroup(g));
+  status.textContent = found.length
+    ? `Groupes prêts : ${found.join(', ')}.`
+    : 'Aucun des groupes 31, 32 ou 51 n’a été retrouvé dans les cours Classroom actifs.';
+}
+
+async function publishPlanToGroup(group) {
+  const course = getClassroomCourseForGroup(group);
+  const btn = document.getElementById(`btn-publish-group-${group}`);
+  const status = document.getElementById('quick-classroom-status');
+
+  if (!googleAccessToken) {
+    showToast('Connectez-vous à Google avant de publier dans Classroom.', 'warn', 3500);
+    return;
+  }
+  if (!course) {
+    showToast(`Le groupe ${group} n’a pas été retrouvé dans vos cours Classroom actifs.`, 'err', 4000);
+    updateQuickClassroomButtons();
+    return;
+  }
+  if (document.documentElement.dataset.pdcClassroomBridge !== '1') {
+    showToast('Le script Tampermonkey de publication Classroom n’est pas actif.', 'err', 4500);
+    return;
+  }
+
+  const emojiBox = document.getElementById('avec-emojis');
+  if (emojiBox) emojiBox.checked = true;
+
+  const original = btn?.textContent || `Groupe ${group}`;
+  if (btn) { btn.disabled = true; btn.textContent = 'Préparation…'; }
+  if (status) status.textContent = `Préparation du plan pour le groupe ${group}…`;
+
+  try {
+    await generer();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const select = document.getElementById('classroom-course-select');
+    if (select) select.value = String(course.id);
+
+    document.dispatchEvent(new CustomEvent('pdc:publish-course', {
+      detail: { courseId: String(course.id), group: String(group) }
+    }));
+
+    if (btn) btn.textContent = 'Ouverture…';
+    if (status) status.textContent = `Ouverture de Classroom - groupe ${group}…`;
+    setTimeout(() => {
+      if (btn) btn.textContent = original;
+      updateQuickClassroomButtons();
+    }, 3500);
+  } catch (err) {
+    console.error('Publication rapide Classroom', err);
+    if (btn) btn.textContent = original;
+    updateQuickClassroomButtons();
+    if (status) status.textContent = `Échec de préparation pour le groupe ${group}.`;
+    showToast('Impossible de préparer le plan pour Classroom.', 'err', 4000);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', updateQuickClassroomButtons);
+
 async function loadClassroomCourses() {
   if (!googleAccessToken) return;
   setStatus('classroom-status', 'Chargement des cours...', '');
@@ -1803,6 +1894,7 @@ async function loadClassroomCourses() {
   const select = document.getElementById('classroom-course-select');
   select.innerHTML = '<option value="">Choisir un cours</option>' + classroomCourses.map(c => `<option value="${c.id}">${escapeHtml(c.name + (c.section ? ' - ' + c.section : ''))}</option>`).join('');
   setStatus('classroom-status', classroomCourses.length ? `${classroomCourses.length} cours actif(s) trouvés.` : 'Aucun cours actif trouvé.', classroomCourses.length ? 'ok' : '');
+  updateQuickClassroomButtons();
 }
 function htmlVersTexteClassroom(html) {
   const wrapper = document.createElement('div'); wrapper.innerHTML = html || '';

@@ -655,6 +655,37 @@
     cursor: pointer;
   }
 
+  .quick-classroom-publish {
+    margin-top: 28px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+  }
+  .btn-group-publish {
+    min-height: 48px;
+    border: none;
+    border-radius: 9px;
+    padding: 11px 8px;
+    background: var(--red);
+    color: #fff;
+    font: 700 0.9rem 'DM Sans', sans-serif;
+    cursor: pointer;
+    transition: background .18s ease, transform .08s ease, opacity .18s ease;
+  }
+  .btn-group-publish:hover:not(:disabled) { background: #a50d24; }
+  .btn-group-publish:active:not(:disabled) { transform: scale(.98); }
+  .btn-group-publish:disabled { opacity: .38; cursor: not-allowed; }
+  #quick-classroom-status {
+    min-height: 18px;
+    margin-top: 7px;
+    color: #888;
+    font-size: .76rem;
+    line-height: 1.35;
+  }
+  @media (max-width: 520px) {
+    .quick-classroom-publish { grid-template-columns: 1fr; }
+  }
+
   .btn-generate {
     margin-top: 28px;
     width: 100%;
@@ -1344,7 +1375,12 @@
       </div>
     </div>
 
-    <button class="btn-generate" onclick="generer()">Générer le plan de cours</button>
+    <div class="quick-classroom-publish" id="quick-classroom-publish" aria-label="Publication rapide dans Classroom">
+      <button type="button" class="btn-group-publish" id="btn-publish-group-31" data-group="31" onclick="publishPlanToGroup('31')" disabled>Groupe 31</button>
+      <button type="button" class="btn-group-publish" id="btn-publish-group-32" data-group="32" onclick="publishPlanToGroup('32')" disabled>Groupe 32</button>
+      <button type="button" class="btn-group-publish" id="btn-publish-group-51" data-group="51" onclick="publishPlanToGroup('51')" disabled>Groupe 51</button>
+    </div>
+    <div id="quick-classroom-status">Connectez-vous à Google pour activer la publication en un clic.</div>
     <div class="save-indicator" id="save-indicator"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><span id="save-indicator-text">Sauvegardé</span></div>
     <div id="autosave-status"></div>
     </div>
@@ -1491,8 +1527,17 @@
     <button class="changelog-close" onclick="closeChangelog()" title="Fermer">×</button>
     <h2>Notes de mise à jour</h2>
     <div>
-      <span class="changelog-version-badge">v1.0.11</span>
+      <span class="changelog-version-badge">v1.0.12</span>
       <span class="changelog-date">Août 2026</span>
+    </div>
+
+    <div class="changelog-section">
+      <h3>Publication Classroom en un clic - v1.0.12</h3>
+      <ul>
+        <li><strong>Groupes 31, 32 et 51</strong> : un clic génère l'aperçu et lance directement la publication dans le bon groupe.</li>
+        <li><strong>Moins de clics</strong> : le bouton Générer séparé n'est plus nécessaire pour le plan de cours.</li>
+        <li><strong>Publication plus sûre</strong> : le pont Tampermonkey ne relance plus une annonce après le clic sur Publier.</li>
+      </ul>
     </div>
 
     <div class="changelog-section">
@@ -1576,7 +1621,7 @@
 
 <footer style="text-align:center;padding:24px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:#aaa;border-top:1px solid #e2ddd8;margin-top:20px;">
   &copy; 2026 Kevin Tremblay &mdash; Équipe des technopédagogues de l'École Cardinal-Roy
-  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.11</button>
+  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.12</button>
   &mdash; <a href="https://raw.githubusercontent.com/techno-cardi/Plan-de-cours/main/Guide%20d'utilisation%20-%20G%C3%A9n%C3%A9rateur%20de%20plan%20de%20cours.pdf" target="_blank" rel="noopener noreferrer" style="color:#aaa;text-decoration:none;font-weight:600;" onmouseover="this.style.color='#C0152A'" onmouseout="this.style.color='#aaa'">📄 Guide d'utilisation</a>
 </footer>
 <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
