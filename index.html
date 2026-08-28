@@ -1527,8 +1527,18 @@
     <button class="changelog-close" onclick="closeChangelog()" title="Fermer">×</button>
     <h2>Notes de mise à jour</h2>
     <div>
-      <span class="changelog-version-badge">v1.0.12</span>
+      <span class="changelog-version-badge">v1.0.13</span>
       <span class="changelog-date">Août 2026</span>
+    </div>
+
+    <div class="changelog-section">
+      <h3>Fiabilité Classroom - v1.0.13</h3>
+      <ul>
+        <li><strong>Groupe exact</strong> : les boutons privilégient explicitement « Groupe 31 », « Groupe 32 » et « Groupe 51 » et refusent une correspondance ambiguë.</li>
+        <li><strong>Aucun ancien aperçu</strong> : une génération refusée ne peut plus publier le plan précédent.</li>
+        <li><strong>Emojis vérifiés</strong> : la publication n'est lancée que si la majorité des emojis attendus sont réellement présents dans l'annonce.</li>
+        <li><strong>Publier sécurisé</strong> : attente plus longue de l'activation du vrai bouton principal avant un seul clic natif.</li>
+      </ul>
     </div>
 
     <div class="changelog-section">
@@ -1621,7 +1631,7 @@
 
 <footer style="text-align:center;padding:24px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:#aaa;border-top:1px solid #e2ddd8;margin-top:20px;">
   &copy; 2026 Kevin Tremblay &mdash; Équipe des technopédagogues de l'École Cardinal-Roy
-  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.12</button>
+  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.13</button>
   &mdash; <a href="https://raw.githubusercontent.com/techno-cardi/Plan-de-cours/main/Guide%20d'utilisation%20-%20G%C3%A9n%C3%A9rateur%20de%20plan%20de%20cours.pdf" target="_blank" rel="noopener noreferrer" style="color:#aaa;text-decoration:none;font-weight:600;" onmouseover="this.style.color='#C0152A'" onmouseout="this.style.color='#aaa'">📄 Guide d'utilisation</a>
 </footer>
 <div id="toast-container" aria-live="polite" aria-atomic="false"></div>

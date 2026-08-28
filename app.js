@@ -1797,16 +1797,29 @@ async function saveActivitiesToBank(entries) {
 }
 const QUICK_CLASSROOM_GROUPS = ['31', '32', '51'];
 
-function classroomCourseMatchesGroup(course, group) {
-  const raw = `${course?.name || ''} ${course?.section || ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+function classroomCourseScoreGroup(course, group) {
+  const raw = `${course?.name || ''} ${course?.section || ''}`
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
   const g = String(group || '').trim();
-  if (!g) return false;
+  if (!g) return 0;
   const escaped = g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:^|[^0-9])${escaped}(?:[^0-9]|$)`).test(raw);
+  if (new RegExp(`\bGROUPE\s*[-–—:]?\s*${escaped}\b`).test(raw)) return 120;
+  if (new RegExp(`\b(?:FRA|FRANCAIS|SAE)[^\n]{0,30}(?:-|\s)${escaped}\b`).test(raw)) return 90;
+  if (new RegExp(`(?:^|[^0-9])${escaped}(?:[^0-9]|$)`).test(raw)) return 50;
+  return 0;
 }
 
 function getClassroomCourseForGroup(group) {
-  return classroomCourses.find(c => classroomCourseMatchesGroup(c, group)) || null;
+  const ranked = classroomCourses
+    .map(course => ({ course, score: classroomCourseScoreGroup(course, group) }))
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (!ranked.length) return null;
+  if (ranked.length > 1 && ranked[0].score === ranked[1].score) {
+    console.warn(`Plusieurs cours Classroom correspondent au groupe ${group}`, ranked.slice(0, 3));
+    return null;
+  }
+  return ranked[0].course;
 }
 
 function updateQuickClassroomButtons() {
@@ -1859,14 +1872,25 @@ async function publishPlanToGroup(group) {
   if (status) status.textContent = `Préparation du plan pour le groupe ${group}…`;
 
   try {
+    latestGeneratedText = '';
+    latestGeneratedHtml = '';
     await generer();
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (!latestGeneratedText || !latestGeneratedHtml) {
+      throw new Error('Le plan courant n’a pas pu être généré.');
+    }
 
     const select = document.getElementById('classroom-course-select');
     if (select) select.value = String(course.id);
 
     document.dispatchEvent(new CustomEvent('pdc:publish-course', {
-      detail: { courseId: String(course.id), group: String(group) }
+      detail: {
+        courseId: String(course.id),
+        group: String(group),
+        courseName: course.name || '',
+        courseSection: course.section || '',
+        alternateLink: course.alternateLink || ''
+      }
     }));
 
     if (btn) btn.textContent = 'Ouverture…';
