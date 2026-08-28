@@ -1,0 +1,49 @@
+name: Publication Classroom en un clic v109b
+on:
+  push:
+    paths:
+      - .github/workflows/patch-classroom-oneclick-v109b.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Corriger le moteur de remplacement
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('.github/patch-classroom-oneclick-v109.py')
+          s=p.read_text(encoding='utf-8')
+          for name in ['launch','insert','rpc','post','flow']:
+              old=f"{name}_pattern.subn({name}_replacement, s, count=1)"
+              new=f"{name}_pattern.subn(lambda m: {name}_replacement, s, count=1)"
+              s=s.replace(old,new)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Appliquer le correctif
+        run: python .github/patch-classroom-oneclick-v109.py
+      - name: Valider JavaScript et interface
+        run: |
+          node --check app.js
+          node --check classroom-rich-publish.user.js
+          grep -q "@version      1.0.9" classroom-rich-publish.user.js
+          grep -q "publishPlanToGroup('31')" index.html
+          grep -q "publishPlanToGroup('32')" index.html
+          grep -q "publishPlanToGroup('51')" index.html
+          grep -q "pdc:publish-course" app.js
+          grep -q "pdc:publish-course" classroom-rich-publish.user.js
+          grep -q "contentLooksInserted" classroom-rich-publish.user.js
+          grep -q "pending.status = 'clicking'" classroom-rich-publish.user.js
+          if grep -q "publishRichViaClassroomRpc" classroom-rich-publish.user.js; then exit 1; fi
+          if grep -q "CLASSROOM_CREATE_TEMPLATE" classroom-rich-publish.user.js; then exit 1; fi
+      - name: Créer l’installateur sans cache
+        run: cp classroom-rich-publish.user.js classroom-rich-publish-v1.0.9.user.js
+      - name: Committer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html app.js classroom-rich-publish.user.js classroom-rich-publish-v1.0.9.user.js
+          git diff --cached --quiet || git commit -m "Ajoute la publication Classroom en un clic"
+          git push
