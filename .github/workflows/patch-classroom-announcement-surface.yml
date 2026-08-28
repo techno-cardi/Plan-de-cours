@@ -1,0 +1,30 @@
+name: Correctif panneau annonce Classroom
+on:
+  push:
+    paths:
+      - .github/patch-classroom-announcement-surface.py
+      - .github/workflows/patch-classroom-announcement-surface.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Appliquer le correctif
+        run: python .github/patch-classroom-announcement-surface.py
+      - name: Valider
+        run: |
+          node --check classroom-rich-publish.user.js
+          grep -q "@version      1.0.4" classroom-rich-publish.user.js
+          grep -q "findNewAnnouncementButton" classroom-rich-publish.user.js
+          grep -q "findAnnouncementSurface" classroom-rich-publish.user.js
+          grep -q "annoncez quelque chose a votre classe" classroom-rich-publish.user.js
+          grep -q "Ne jamais prendre un champ de commentaire" classroom-rich-publish.user.js
+      - name: Committer
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add classroom-rich-publish.user.js
+          git diff --cached --quiet || git commit -m "Empêche la sélection des commentaires dans Classroom"
+          git push
