@@ -1,48 +1,84 @@
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
 const userscript = fs.readFileSync(new URL('../classroom-rich-publish.user.js', import.meta.url), 'utf8');
-const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.1.2.user.js', import.meta.url), 'utf8');
+const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.2.0.user.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+const manifest = JSON.parse(fs.readFileSync(new URL('../chrome-classroom-native-bridge/manifest.json', import.meta.url), 'utf8'));
+const nativeBackground = fs.readFileSync(new URL('../chrome-classroom-native-bridge/background.js', import.meta.url), 'utf8');
+const nativeGenerator = fs.readFileSync(new URL('../chrome-classroom-native-bridge/generator.js', import.meta.url), 'utf8');
+const nativeClassroom = fs.readFileSync(new URL('../chrome-classroom-native-bridge/classroom.js', import.meta.url), 'utf8');
 
-assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.1.2 doit correspondre au script canonique');
-assert.match(userscript, /@version\s+1\.1\.2/);
+assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.2.0 doit correspondre au script canonique');
+assert.match(userscript, /@version\s+1\.2\.0/);
 assert.match(userscript, /dataset\.pdcClassroomBridgeVersion = VERSION/);
-assert.match(userscript, /status: 'verifying'/);
-assert.match(userscript, /verified-visible/);
-assert.doesNotMatch(userscript, /insertRichHtml|findPostButton|findNewAnnouncementButton|document\.execCommand|Nouvelle annonce/);
+assert.match(userscript, /PDC_NATIVE_PUBLISH_REQUEST/);
+assert.match(userscript, /dataset\.pdcClassroomBridgeMode = 'native-extension'/);
+assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|document\.execCommand|Nouvelle annonce/);
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
-assert.match(userscript, /const CREATE_SETTLE_MS = 1200/);
-assert.match(userscript, /const SAVE_SETTLE_MS = 5200/);
-assert.match(userscript, /Finaliser la même annonce/);
-assert.match(userscript, /rpcStage: 'saved'/);
+
+assert.equal(manifest.manifest_version, 3);
+assert.equal(manifest.version, '1.0.0');
+assert.deepEqual(manifest.permissions.sort(), ['debugger', 'storage', 'tabs']);
+assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
+assert.match(nativeBackground, /Input\.dispatchKeyEvent/);
+assert.match(nativeBackground, /Input\.dispatchMouseEvent/);
+assert.match(nativeBackground, /une publication Classroom est déjà en cours/);
+assert.match(nativeClassroom, /duplicateVisible/);
+assert.match(nativeClassroom, /titleUnderlined/);
+assert.match(nativeClassroom, /devoirBold/);
+assert.match(nativeClassroom, /Aucun autre éditeur ne sera ouvert automatiquement/);
+assert.doesNotMatch(nativeClassroom, /\.innerHTML\s*=/);
+
+const stored = {};
+const debuggerCommands = [];
+const backgroundContext = {
+  URL,
+  console,
+  chrome: {
+    storage: { local: {
+      async get(key) { return { [key]: stored[key] }; },
+      async set(values) { Object.assign(stored, values); },
+      async remove(key) { delete stored[key]; }
+    } },
+    tabs: { async create({ url }) { return { id: 202, url }; } },
+    debugger: {
+      async attach() {}, async detach() {},
+      async sendCommand(_target, method, params) { debuggerCommands.push({ method, params }); }
+    },
+    runtime: { onMessage: { addListener() {} } }
+  }
+};
+vm.createContext(backgroundContext);
+vm.runInContext(nativeBackground, backgroundContext);
+const prepared = await backgroundContext.handleMessage({ type: 'prepare', payload: {
+  requestId: 'r1', createdAt: Date.now(), courseId: '875523698222', group: '31',
+  courseName: 'Français SAÉ — Groupe 31', courseSection: '3e secondaire — Groupe 31',
+  alternateLink: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy',
+  text: 'Cours #2\n\n1️⃣ Activité test', title: 'Cours #2', probes: ['Cours #2', '1️⃣ Activité test']
+} }, { tab: { id: 101, url: 'https://techno-cardi.github.io/Plan-de-cours/' } });
+assert.equal(prepared.ok, true);
+const claimed = await backgroundContext.handleMessage({ type: 'claim' }, { tab: { id: 202, url: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy' } });
+assert.equal(claimed.job.courseId, '875523698222');
+await backgroundContext.handleMessage({ type: 'paste' }, { tab: { id: 202, url: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy' } });
+assert.deepEqual(debuggerCommands.map(command => command.method), ['Input.dispatchKeyEvent', 'Input.dispatchKeyEvent']);
+await backgroundContext.handleMessage({ type: 'publish', x: 800, y: 650 }, { tab: { id: 202, url: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy' } });
+assert.deepEqual(debuggerCommands.slice(-2).map(command => command.method), ['Input.dispatchMouseEvent', 'Input.dispatchMouseEvent']);
+await backgroundContext.handleMessage({ type: 'complete' }, { tab: { id: 202, url: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy' } });
+assert.equal(stored.pdcNativeClassroomJob, undefined);
 
 const sanitizerStart = userscript.indexOf('function decodeHtmlText');
-const sanitizerEnd = userscript.indexOf('function requestCourseDetails', sanitizerStart);
+const sanitizerEnd = userscript.indexOf('function note', sanitizerStart);
 const sanitizerSource = sanitizerStart >= 0 && sanitizerEnd > sanitizerStart ? userscript.slice(sanitizerStart, sanitizerEnd).trim() : '';
 assert.ok(sanitizerSource, 'Nettoyeur HTML sans DOM absent');
 const sanitizerContext = {};
 vm.createContext(sanitizerContext);
-vm.runInContext(`${sanitizerSource}; this.clean = cleanRichHtml; this.toText = richHtmlToClassroomText;`, sanitizerContext);
+vm.runInContext(`${sanitizerSource}; this.clean = cleanRichHtml; this.toText = richHtmlToText;`, sanitizerContext);
 const dirtyRich = '<div class="x"><strong onclick="bad()"><u>Cours #1</u></strong> 🌽</div><script>bad()</script><p>1️⃣&nbsp;Activité &amp; test<br><img alt="🏖️" src="bad"></p>';
 const safeRich = sanitizerContext.clean(dirtyRich);
 assert.equal(safeRich, '<p><b><u>Cours #1</u></b> 🌽</p><p>1️⃣&nbsp;Activité &amp; test<br>🏖️</p>');
 assert.equal(sanitizerContext.toText(safeRich), 'Cours #1 🌽\n\n1️⃣ Activité & test\n🏖️');
-
-const templateHashes = {
-  CREATE: '705f0eccb53f77733e7ddf4e13161e3fc949d1846f1f538c0a8991f6ea070a17',
-  SAVE: 'cc4a07b623f55aa52c9b35e84db3809dbabe0552b740ed3d20fa03a996d274a5',
-  PUBLISH: '6035c68f1f017d7db39b98590112eb3ff737de4b73bb6ecdac231e1e150276b8'
-};
-
-for (const [name, expectedHash] of Object.entries(templateHashes)) {
-  const match = userscript.match(new RegExp(`const CLASSROOM_${name}_TEMPLATE = (\\[.*\\]);`));
-  assert.ok(match, `Modèle RPC ${name} absent`);
-  assert.doesNotThrow(() => JSON.parse(match[1]), `Modèle RPC ${name} invalide`);
-  assert.equal(crypto.createHash('sha256').update(match[1]).digest('hex'), expectedHash, `Modèle RPC ${name} modifié`);
-}
 
 const scoreStart = app.indexOf('function classroomCourseScoreGroup');
 const scoreEnd = app.indexOf('function getClassroomCourseForGroup', scoreStart);
