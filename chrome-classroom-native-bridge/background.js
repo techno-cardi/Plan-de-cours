@@ -1,4 +1,5 @@
 const JOB_KEY = 'pdcNativeClassroomJob';
+const LAST_RESULT_KEY = 'pdcNativeClassroomLastResult';
 const MAX_AGE_MS = 5 * 60 * 1000;
 const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
 
@@ -21,14 +22,18 @@ async function writeJob(job) {
 }
 
 async function finishJob(job, outcome, error = '') {
-  await chrome.tabs.sendMessage(job.sourceTabId, {
+  const result = {
     type: RESULT,
     requestId: job.requestId,
     group: job.group,
     outcome,
-    error
-  }).catch(() => {});
+    error,
+    finishedAt: Date.now()
+  };
+  await chrome.storage.local.set({ [LAST_RESULT_KEY]: result });
+  await chrome.tabs.sendMessage(job.sourceTabId, result).catch(() => {});
   await chrome.storage.local.remove(JOB_KEY);
+  await chrome.tabs.update(job.sourceTabId, { active: true }).catch(() => {});
   if (job.classroomTabId && job.classroomTabId !== job.sourceTabId) {
     await chrome.tabs.remove(job.classroomTabId).catch(() => {});
   }
@@ -127,6 +132,10 @@ async function handleMessage(message, sender) {
     job.status = 'publishing';
     await writeJob(job);
     await nativeClick(sender.tab.id, Number(message.x), Number(message.y));
+    return { ok: true };
+  }
+  if (message.type === 'activate') {
+    await chrome.tabs.update(sender.tab.id, { active: true });
     return { ok: true };
   }
   if (message.type === 'complete') {

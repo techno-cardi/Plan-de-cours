@@ -4,27 +4,44 @@
   const REQUEST = 'PDC_NATIVE_PUBLISH_REQUEST';
   const ACK = 'PDC_NATIVE_PUBLISH_ACK';
   const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
-  document.documentElement.dataset.pdcNativePublisherVersion = '1.0.2';
+  const LAST_RESULT_KEY = 'pdcNativeClassroomLastResult';
+  document.documentElement.dataset.pdcNativePublisherVersion = '1.0.3';
+  let lastDeliveredResult = '';
 
-  chrome.runtime.onMessage.addListener(message => {
-    if (message?.type !== RESULT) return;
+  function deliverResult(message) {
+    const requestId = String(message?.requestId || '');
+    if (!requestId || requestId === lastDeliveredResult) return;
+    lastDeliveredResult = requestId;
     window.postMessage({
       type: RESULT,
-      requestId: String(message.requestId || ''),
+      requestId,
       outcome: String(message.outcome || 'failed'),
       group: String(message.group || ''),
       error: String(message.error || '')
     }, location.origin);
+  }
+
+  chrome.runtime.onMessage.addListener(message => {
+    if (message?.type !== RESULT) return;
+    deliverResult(message);
   });
+
+  setInterval(async () => {
+    try {
+      const result = (await chrome.storage.local.get(LAST_RESULT_KEY))[LAST_RESULT_KEY];
+      if (result && Date.now() - Number(result.finishedAt || 0) < 10 * 60 * 1000) deliverResult(result);
+    } catch (_) { /* le message direct reste le chemin principal */ }
+  }, 1000);
 
   window.addEventListener('message', event => {
     if (event.source !== window || event.origin !== location.origin || event.data?.type !== REQUEST) return;
     const requestId = String(event.data.requestId || '');
     const payload = event.data.payload || {};
+    window.postMessage({ type: ACK, requestId, ok: true, error: '' }, location.origin);
     chrome.runtime.sendMessage({ type: 'prepare', payload }).then(result => {
-      window.postMessage({ type: ACK, requestId, ok: Boolean(result?.ok), error: result?.error || '' }, location.origin);
+      if (!result?.ok) deliverResult({ requestId, outcome: 'failed', group: payload.group, error: result?.error || 'pont Chrome indisponible' });
     }).catch(error => {
-      window.postMessage({ type: ACK, requestId, ok: false, error: String(error?.message || error) }, location.origin);
+      deliverResult({ requestId, outcome: 'failed', group: payload.group, error: String(error?.message || error) });
     });
   });
 })();

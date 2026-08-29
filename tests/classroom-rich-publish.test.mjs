@@ -22,16 +22,19 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.2');
+assert.equal(manifest.version, '1.0.3');
 assert.deepEqual(manifest.permissions.sort(), ['debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.2'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.3'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
+assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
 assert.match(nativeBackground, /Input\.dispatchKeyEvent/);
 assert.match(nativeBackground, /Input\.dispatchMouseEvent/);
 assert.match(nativeBackground, /une publication Classroom est déjà en cours/);
 assert.match(nativeBackground, /active: false/);
 assert.match(nativeBackground, /finishJob/);
+assert.match(nativeBackground, /tabs\.update\(job\.sourceTabId, \{ active: true \}\)/);
+assert.match(nativeClassroom, /type: 'activate'/);
 assert.match(nativeClassroom, /duplicateVisible/);
 assert.match(nativeClassroom, /getAttribute\('aria-label'\)/);
 assert.match(nativeClassroom, /\[jsname="V67aGc"\],span/);
@@ -47,6 +50,7 @@ const stored = {};
 const debuggerCommands = [];
 const tabMessages = [];
 const removedTabs = [];
+const updatedTabs = [];
 let createdTabOptions = null;
 const backgroundContext = {
   URL,
@@ -60,6 +64,7 @@ const backgroundContext = {
     tabs: {
       async create(options) { createdTabOptions = options; return { id: 202, url: options.url }; },
       async sendMessage(tabId, message) { tabMessages.push({ tabId, message }); },
+      async update(tabId, options) { updatedTabs.push({ tabId, options }); },
       async remove(tabId) { removedTabs.push(tabId); }
     },
     debugger: {
@@ -89,6 +94,9 @@ await backgroundContext.handleMessage({ type: 'complete', outcome: 'published' }
 assert.equal(stored.pdcNativeClassroomJob, undefined);
 assert.equal(tabMessages[0].tabId, 101);
 assert.equal(tabMessages[0].message.outcome, 'published');
+assert.equal(stored.pdcNativeClassroomLastResult.outcome, 'published');
+assert.equal(updatedTabs[0].tabId, 101);
+assert.equal(updatedTabs[0].options.active, true);
 assert.deepEqual(removedTabs, [202]);
 
 const sanitizerStart = userscript.indexOf('function decodeHtmlText');

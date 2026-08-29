@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.2';
+  const VERSION = '1.0.3';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const fold = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -84,7 +84,12 @@
         return;
       }
 
-      const newButton = await waitFor(() => visibleButton('Nouvelle annonce'), 12000);
+      let newButton = await waitFor(() => visibleButton('Nouvelle annonce'), 12000);
+      if (!newButton) {
+        await send({ type: 'activate' });
+        await sleep(900);
+        newButton = await waitFor(() => visibleButton('Nouvelle annonce'), 12000);
+      }
       if (!newButton) throw new Error('bouton Nouvelle annonce introuvable');
       newButton.click();
       const editor = await waitFor(() => document.querySelector('[contenteditable="true"][aria-label*="Annoncez"]'), 10000);

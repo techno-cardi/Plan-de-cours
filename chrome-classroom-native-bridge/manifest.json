@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Plan de cours — Pont natif Classroom",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Publie les plans riches avec l’éditeur natif de Google Classroom.",
   "permissions": ["debugger", "storage", "tabs"],
   "host_permissions": [
