@@ -24,10 +24,10 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.4');
+assert.equal(manifest.version, '1.0.5');
 assert.deepEqual(manifest.permissions.sort(), ['debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.4'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.5'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
 assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
 assert.match(nativeGenerator, /pdcNativeRequestAck/);
@@ -35,7 +35,8 @@ assert.match(nativeGenerator, /pdcNativePublishResult/);
 assert.match(nativeBackground, /Input\.dispatchKeyEvent/);
 assert.match(nativeBackground, /Input\.dispatchMouseEvent/);
 assert.match(nativeBackground, /une publication Classroom est déjà en cours/);
-assert.match(nativeBackground, /active: false/);
+assert.match(nativeBackground, /active: true/);
+assert.match(nativeBackground, /windowId: sender\.tab\.windowId/);
 assert.match(nativeBackground, /finishJob/);
 assert.match(nativeBackground, /tabs\.update\(job\.sourceTabId, \{ active: true \}\)/);
 assert.match(nativeClassroom, /type: 'activate'/);
@@ -90,9 +91,10 @@ const prepared = await backgroundContext.handleMessage({ type: 'prepare', payloa
   courseName: 'Français SAÉ — Groupe 31', courseSection: '3e secondaire — Groupe 31',
   alternateLink: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy',
   text: 'Cours #2\n\n1️⃣ Activité test', title: 'Cours #2', probes: ['Cours #2', '1️⃣ Activité test']
-} }, { tab: { id: 101, url: 'https://techno-cardi.github.io/Plan-de-cours/' } });
+} }, { tab: { id: 101, windowId: 77, url: 'https://techno-cardi.github.io/Plan-de-cours/' } });
 assert.equal(prepared.ok, true);
-assert.equal(createdTabOptions.active, false);
+assert.equal(createdTabOptions.active, true);
+assert.equal(createdTabOptions.windowId, 77);
 const claimed = await backgroundContext.handleMessage({ type: 'claim' }, { tab: { id: 202, url: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy' } });
 assert.equal(claimed.job.courseId, '875523698222');
 await backgroundContext.handleMessage({ type: 'paste' }, { tab: { id: 202, url: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy' } });

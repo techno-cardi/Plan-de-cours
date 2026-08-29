@@ -1509,7 +1509,7 @@
   </div>
 </main>
 
-<script src="app.js?v=1.0.17-final3"></script>
+<script src="app.js?v=1.0.18"></script>
 
 <!-- Confirm reset modal -->
 <div class="confirm-overlay" id="confirm-reset-overlay" onclick="if(event.target===this)closeConfirmReset()">
@@ -1534,8 +1534,16 @@
     <button class="changelog-close" onclick="closeChangelog()" title="Fermer">×</button>
     <h2>Notes de mise à jour</h2>
     <div>
-      <span class="changelog-version-badge">v1.0.17</span>
+      <span class="changelog-version-badge">v1.0.18</span>
       <span class="changelog-date">Août 2026</span>
+    </div>
+
+    <div class="changelog-section">
+      <h3>Ouverture Classroom entièrement automatique - v1.0.18</h3>
+      <ul>
+        <li><strong>Plus aucun clic manuel</strong> : l’extension active elle-même Classroom pour forcer le chargement complet de l’éditeur.</li>
+        <li><strong>Retour automatique</strong> : après la publication vérifiée, le générateur revient au premier plan et l’onglet Classroom technique se ferme.</li>
+      </ul>
     </div>
 
     <div class="changelog-section">
@@ -1553,7 +1561,7 @@
         <li><strong>Numéro propre à chaque groupe</strong> : le prochain numéro est calculé à partir de la dernière publication confirmée dans ce groupe.</li>
         <li><strong>Comparaison prudente</strong> : la numérotation avance seulement lorsque les activités ont réellement changé; les variations d’emojis, d’accents ou de ponctuation sont ignorées.</li>
         <li><strong>Confirmation réelle</strong> : un échec ne modifie jamais le dernier numéro et une annonce déjà présente n’est pas recréée.</li>
-        <li><strong>Mode discret</strong> : Classroom s’ouvre dans un onglet d’arrière-plan qui se ferme après la vérification.</li>
+        <li><strong>Nettoyage automatique</strong> : l’onglet Classroom se ferme après la vérification.</li>
       </ul>
     </div>
 
@@ -1677,7 +1685,7 @@
 
 <footer style="text-align:center;padding:24px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:#aaa;border-top:1px solid #e2ddd8;margin-top:20px;">
   &copy; 2026 Kevin Tremblay &mdash; Équipe des technopédagogues de l'École Cardinal-Roy
-  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.17</button>
+  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.18</button>
   &mdash; <a href="https://raw.githubusercontent.com/techno-cardi/Plan-de-cours/main/Guide%20d'utilisation%20-%20G%C3%A9n%C3%A9rateur%20de%20plan%20de%20cours.pdf" target="_blank" rel="noopener noreferrer" style="color:#aaa;text-decoration:none;font-weight:600;" onmouseover="this.style.color='#C0152A'" onmouseout="this.style.color='#aaa'">📄 Guide d'utilisation</a>
 </footer>
 <div id="toast-container" aria-live="polite" aria-atomic="false"></div>

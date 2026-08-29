@@ -103,7 +103,14 @@ async function handleMessage(message, sender) {
       status: 'opening'
     };
     await writeJob(job);
-    const classroomTab = await chrome.tabs.create({ url: job.alternateLink, active: false });
+    // Classroom ne construit pas toujours son éditeur dans un onglet créé en
+    // arrière-plan. L'activer ici garantit le chargement du script de contenu,
+    // sans dépendre de ce même script pour demander ensuite l'activation.
+    const classroomTab = await chrome.tabs.create({
+      url: job.alternateLink,
+      active: true,
+      windowId: sender.tab.windowId
+    });
     job.classroomTabId = classroomTab.id;
     await writeJob(job);
     return { ok: true };
