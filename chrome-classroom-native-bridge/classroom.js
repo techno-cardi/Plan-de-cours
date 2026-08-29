@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.3';
+  const VERSION = '1.0.4';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const fold = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')

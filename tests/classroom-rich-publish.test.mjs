@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const userscript = fs.readFileSync(new URL('../classroom-rich-publish.user.js', import.meta.url), 'utf8');
-const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.2.1.user.js', import.meta.url), 'utf8');
+const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.2.2.user.js', import.meta.url), 'utf8');
 const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(new URL('../chrome-classroom-native-bridge/manifest.json', import.meta.url), 'utf8'));
@@ -11,23 +11,27 @@ const nativeBackground = fs.readFileSync(new URL('../chrome-classroom-native-bri
 const nativeGenerator = fs.readFileSync(new URL('../chrome-classroom-native-bridge/generator.js', import.meta.url), 'utf8');
 const nativeClassroom = fs.readFileSync(new URL('../chrome-classroom-native-bridge/classroom.js', import.meta.url), 'utf8');
 
-assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.2.1 doit correspondre au script canonique');
-assert.match(userscript, /@version\s+1\.2\.1/);
+assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.2.2 doit correspondre au script canonique');
+assert.match(userscript, /@version\s+1\.2\.2/);
 assert.match(userscript, /dataset\.pdcClassroomBridgeVersion = VERSION/);
 assert.match(userscript, /PDC_NATIVE_PUBLISH_REQUEST/);
 assert.match(userscript, /dataset\.pdcClassroomBridgeMode = 'native-extension'/);
 assert.match(userscript, /pdc:publish-result/);
+assert.match(userscript, /pdcNativeRequestAck/);
+assert.match(userscript, /pdcNativePublishResult/);
 assert.doesNotMatch(userscript, /Publication native Classroom active|Publication native lancée|Pont Chrome natif non détecté —/);
 assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|document\.execCommand|Nouvelle annonce/);
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.3');
+assert.equal(manifest.version, '1.0.4');
 assert.deepEqual(manifest.permissions.sort(), ['debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.3'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.4'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
 assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
+assert.match(nativeGenerator, /pdcNativeRequestAck/);
+assert.match(nativeGenerator, /pdcNativePublishResult/);
 assert.match(nativeBackground, /Input\.dispatchKeyEvent/);
 assert.match(nativeBackground, /Input\.dispatchMouseEvent/);
 assert.match(nativeBackground, /une publication Classroom est déjà en cours/);
