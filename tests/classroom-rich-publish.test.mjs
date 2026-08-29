@@ -4,15 +4,28 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const userscript = fs.readFileSync(new URL('../classroom-rich-publish.user.js', import.meta.url), 'utf8');
-const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.1.0.user.js', import.meta.url), 'utf8');
+const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.1.1.user.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 
-assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.1.0 doit correspondre au script canonique');
-assert.match(userscript, /@version\s+1\.1\.0/);
+assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.1.1 doit correspondre au script canonique');
+assert.match(userscript, /@version\s+1\.1\.1/);
 assert.match(userscript, /dataset\.pdcClassroomBridgeVersion = VERSION/);
 assert.match(userscript, /status: 'verifying'/);
 assert.match(userscript, /verified-visible/);
 assert.doesNotMatch(userscript, /insertRichHtml|findPostButton|findNewAnnouncementButton|document\.execCommand|Nouvelle annonce/);
+assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
+
+const sanitizerStart = userscript.indexOf('function decodeHtmlText');
+const sanitizerEnd = userscript.indexOf('function requestCourseDetails', sanitizerStart);
+const sanitizerSource = sanitizerStart >= 0 && sanitizerEnd > sanitizerStart ? userscript.slice(sanitizerStart, sanitizerEnd).trim() : '';
+assert.ok(sanitizerSource, 'Nettoyeur HTML sans DOM absent');
+const sanitizerContext = {};
+vm.createContext(sanitizerContext);
+vm.runInContext(`${sanitizerSource}; this.clean = cleanRichHtml; this.toText = richHtmlToClassroomText;`, sanitizerContext);
+const dirtyRich = '<div class="x"><strong onclick="bad()"><u>Cours #1</u></strong> 🌽</div><script>bad()</script><p>1️⃣&nbsp;Activité &amp; test<br><img alt="🏖️" src="bad"></p>';
+const safeRich = sanitizerContext.clean(dirtyRich);
+assert.equal(safeRich, '<p><b><u>Cours #1</u></b> 🌽</p><p>1️⃣&nbsp;Activité &amp; test<br>🏖️</p>');
+assert.equal(sanitizerContext.toText(safeRich), 'Cours #1 🌽\n\n1️⃣ Activité & test\n🏖️');
 
 const templateHashes = {
   CREATE: '705f0eccb53f77733e7ddf4e13161e3fc949d1846f1f538c0a8991f6ea070a17',
