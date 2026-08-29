@@ -2881,6 +2881,24 @@ function formatEditorList(editorId, type) {
   sauvegarderPlanLocal();
 }
 
+function ensureDefaultBullet(editor) {
+  if (!editor || editor.dataset.defaultBulletApplied === '1' || editor.contentEditable === 'false') return;
+  if (!editor.innerText.trim()) return;
+  if (editor.querySelector('ul,ol')) {
+    editor.dataset.defaultBulletApplied = '1';
+    return;
+  }
+  editor.focus();
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  document.execCommand('insertUnorderedList', false, null);
+  editor.dataset.defaultBulletApplied = '1';
+  editor.focus();
+}
+
 const toolbar = document.getElementById('format-toolbar');
 
 function showToolbar(rect) {
@@ -3038,8 +3056,8 @@ applySupplyDefaultsForCurrentUser(true);
 syncSupplyFromCourse(true);
 updateRoleBasedUi();
 setPlanMode('course');
-document.getElementById('devoir').addEventListener('input', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
-document.getElementById('rappel').addEventListener('input', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
+document.getElementById('devoir').addEventListener('input', (event) => { ensureDefaultBullet(event.currentTarget); sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
+document.getElementById('rappel').addEventListener('input', (event) => { ensureDefaultBullet(event.currentTarget); sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('pas-devoir').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('pas-rappel').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('num-cours').addEventListener('input', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });

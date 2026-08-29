@@ -160,6 +160,9 @@ assert.match(app, /announcements\?orderBy=updateTime%20desc&pageSize=100/);
 assert.match(app, /return \{ verified: true, baseline: null \}/);
 assert.match(app, /La numérotation rapide est indépendante/);
 assert.match(app, /if \(!baseline\.verified\)/);
+assert.match(app, /function ensureDefaultBullet/);
+assert.match(app, /insertUnorderedList/);
+assert.match(app, /ensureDefaultBullet\(event\.currentTarget\)/);
 
 const extractStart = app.indexOf('function extractActivitiesFromPublishedPlan');
 const extractEnd = app.indexOf('async function syncClassroomGroupBaseline', extractStart);
