@@ -157,6 +157,9 @@ assert.ok(similarityContext.similarity(['Lecture du Horla', 'Questions 1 à 5'],
 assert.match(app, /CLASSROOM_GROUP_HISTORY_BACKUP_KEY/);
 assert.match(app, /result\.outcome === 'published'/);
 assert.match(app, /announcements\?orderBy=updateTime%20desc&pageSize=100/);
+assert.match(app, /return \{ verified: true, baseline: null \}/);
+assert.match(app, /La numérotation rapide est indépendante/);
+assert.match(app, /if \(!baseline\.verified\)/);
 
 const extractStart = app.indexOf('function extractActivitiesFromPublishedPlan');
 const extractEnd = app.indexOf('async function syncClassroomGroupBaseline', extractStart);

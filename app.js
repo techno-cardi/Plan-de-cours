@@ -1931,7 +1931,15 @@ async function syncClassroomGroupBaseline(group, courseId) {
   try {
     const data = await apiFetch(`https://classroom.googleapis.com/v1/courses/${encodeURIComponent(courseId)}/announcements?orderBy=updateTime%20desc&pageSize=100`);
     const latestPlan = (data.announcements || []).find(announcement => /^\s*Cours\s*#\s*\d+/i.test(String(announcement.text || '')));
-    if (!latestPlan) return { verified: true, baseline: local };
+    if (!latestPlan) {
+      // Une ancienne valeur locale ne suffit pas à prouver qu'un cours a été
+      // publié. Un groupe sans annonce réelle repart donc proprement à #1.
+      if (local) {
+        delete history[String(group)];
+        writeClassroomGroupHistory(history);
+      }
+      return { verified: true, baseline: null };
+    }
     const number = Number.parseInt(String(latestPlan.text).match(/^\s*Cours\s*#\s*(\d+)/i)?.[1] || '', 10);
     if (!Number.isInteger(number) || number < 1) return { verified: true, baseline: local };
     if (!local || number !== Number(local.lastPublishedNumber || 0)) {
@@ -1958,7 +1966,11 @@ function chooseCourseNumberForGroup(group, activities) {
   let number = Number.isInteger(entered) && entered > 0 ? entered : 1;
   let changed = false;
   let similarity = null;
-  if (previous && Number.isInteger(Number(previous.lastPublishedNumber)) && Number(previous.lastPublishedNumber) > 0) {
+  if (!previous) {
+    // La numérotation rapide est indépendante du dernier numéro d'un autre
+    // groupe et commence toujours par le premier cours réel.
+    number = 1;
+  } else if (Number.isInteger(Number(previous.lastPublishedNumber)) && Number(previous.lastPublishedNumber) > 0) {
     similarity = courseActivitySimilarity(previous.activities, activities);
     changed = activities.length > 0 && Array.isArray(previous.activities) && previous.activities.length > 0 && similarity < 0.7;
     number = Number(previous.lastPublishedNumber) + (changed ? 1 : 0);
@@ -2063,7 +2075,7 @@ async function publishPlanToGroup(group) {
     quickClassroomPublishInProgress = true;
     const activities = getCurrentCourseActivitiesForHistory();
     const baseline = await syncClassroomGroupBaseline(group, String(course.id));
-    if (!baseline.verified && !baseline.baseline) {
+    if (!baseline.verified) {
       throw new Error(`Impossible de vérifier le dernier numéro publié dans le groupe ${group}.`);
     }
     const numbering = chooseCourseNumberForGroup(group, activities);
