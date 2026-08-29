@@ -1,0 +1,42 @@
+name: Correctif saisie devoir rappel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-devoir-rappel-caret.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Appliquer le correctif minimal
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app.js')
+          text = p.read_text(encoding='utf-8')
+          old = """  document.execCommand('insertUnorderedList', false, null);\n  editor.dataset.defaultBulletApplied = '1';"""
+          new = """  document.execCommand('insertUnorderedList', false, null);\n  selection.collapseToEnd();\n  editor.dataset.defaultBulletApplied = '1';"""
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'Correctif non appliqué: motif trouvé {count} fois')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          git diff --check
+          git diff -- app.js
+      - name: Commit du correctif
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js
+          git commit -m "Corrige la saisie dans devoir et rappel"
+          git push origin HEAD:main
