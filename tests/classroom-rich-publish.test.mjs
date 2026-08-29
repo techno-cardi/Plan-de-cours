@@ -4,16 +4,20 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const userscript = fs.readFileSync(new URL('../classroom-rich-publish.user.js', import.meta.url), 'utf8');
-const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.1.1.user.js', import.meta.url), 'utf8');
+const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.1.2.user.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 
-assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.1.1 doit correspondre au script canonique');
-assert.match(userscript, /@version\s+1\.1\.1/);
+assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.1.2 doit correspondre au script canonique');
+assert.match(userscript, /@version\s+1\.1\.2/);
 assert.match(userscript, /dataset\.pdcClassroomBridgeVersion = VERSION/);
 assert.match(userscript, /status: 'verifying'/);
 assert.match(userscript, /verified-visible/);
 assert.doesNotMatch(userscript, /insertRichHtml|findPostButton|findNewAnnouncementButton|document\.execCommand|Nouvelle annonce/);
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
+assert.match(userscript, /const CREATE_SETTLE_MS = 1200/);
+assert.match(userscript, /const SAVE_SETTLE_MS = 5200/);
+assert.match(userscript, /Finaliser la même annonce/);
+assert.match(userscript, /rpcStage: 'saved'/);
 
 const sanitizerStart = userscript.indexOf('function decodeHtmlText');
 const sanitizerEnd = userscript.indexOf('function requestCourseDetails', sanitizerStart);
