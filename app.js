@@ -2895,6 +2895,7 @@ function ensureDefaultBullet(editor) {
   selection.removeAllRanges();
   selection.addRange(range);
   document.execCommand('insertUnorderedList', false, null);
+  selection.collapseToEnd();
   editor.dataset.defaultBulletApplied = '1';
   editor.focus();
 }
