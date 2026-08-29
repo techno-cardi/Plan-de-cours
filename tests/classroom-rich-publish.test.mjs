@@ -24,10 +24,10 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.6');
+assert.equal(manifest.version, '1.0.7');
 assert.deepEqual(manifest.permissions.sort(), ['debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.6'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.7'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
 assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
 assert.match(nativeGenerator, /pdcNativeRequestAck/);
@@ -58,6 +58,10 @@ assert.match(app, /MutationObserver\(readNativeClassroomResult\)/);
 assert.match(app, /data-pdc-native-publish-result/);
 assert.match(app, /baseline\.baseline && numbering\.similarity !== null && !numbering\.changed/);
 assert.match(app, /btn\.textContent = `Groupe \$\{group\}`/);
+assert.match(app, /function specialSectionLabel/);
+assert.match(app, /specialSectionLabel\('Devoir'/);
+assert.match(app, /specialSectionLabel\('Rappel'/);
+assert.match(nativeClassroom, /devoirs\?/i);
 
 const stored = {};
 const debuggerCommands = [];

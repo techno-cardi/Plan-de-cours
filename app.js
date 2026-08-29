@@ -635,13 +635,13 @@ async function generer() {
   });
 
   if (pasDevoir) {
-    previewHTML += `<p class="special"><b>Devoir(s) :</b> <b>Aucun devoir</b></p>`;
+    previewHTML += `<p class="special"><b>Devoir :</b> <b>Aucun devoir</b></p>`;
   } else if (devoirText) {
-    previewHTML += buildSpecialPreview('Devoir(s)', devoirHTML);
+    previewHTML += buildSpecialPreview(specialSectionLabel('Devoir', devoirHTML), devoirHTML);
   }
 
   if (!pasRappel && rappelText) {
-    previewHTML += buildSpecialPreview('Rappel(s)', rappelHTML);
+    previewHTML += buildSpecialPreview(specialSectionLabel('Rappel', rappelHTML), rappelHTML);
   }
 
   const planPreview = document.getElementById('plan-preview');
@@ -745,6 +745,15 @@ function richToStructuredLines(html) {
   }
   Array.from(wrapper.childNodes).forEach(process);
   return lines;
+}
+
+function specialSectionLabel(singular, html) {
+  return richToStructuredLines(html).length > 1 ? `${singular}s` : singular;
+}
+
+function plainSectionLabel(singular, text) {
+  const count = String(text || '').replace(/\r/g, '').split(/\n+/).map(line => line.trim()).filter(Boolean).length;
+  return count > 1 ? `${singular}s` : singular;
 }
 
 function buildSpecialPreview(label, html) {
@@ -1903,7 +1912,7 @@ function extractActivitiesFromPublishedPlan(text) {
   for (const rawLine of lines.slice(1)) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (/^(?:devoir|rappel)\(s\)\s*:/i.test(line)) break;
+    if (/^(?:devoirs?|rappels?)\s*:/i.test(line)) break;
     const marker = NUMERO_EMOJIS.find(value => line.startsWith(value));
     if (marker) {
       if (current) activities.push(current);
@@ -2224,16 +2233,18 @@ function buildCurrentPlanTextForClassroom() {
   const activiteEditors = document.querySelectorAll('.activity-row .rich-editor'); let idx = 0;
   activiteEditors.forEach(ed => { const t = htmlVersTexteClassroom(ed.innerHTML); if (!t) return; const lines = t.split(/\n+/).map(x => x.trim()).filter(Boolean); if (!lines.length) return; texte += NUMERO_EMOJIS[idx] + ' ' + lines[0] + '\n'; for (let i = 1; i < lines.length; i++) texte += '   ' + lines[i] + '\n'; idx++; });
   const pasDevoir = document.getElementById('pas-devoir').checked; const devoir = htmlVersTexteClassroom(document.getElementById('devoir').innerHTML); const pasRappel = document.getElementById('pas-rappel').checked; const rappel = htmlVersTexteClassroom(document.getElementById('rappel').innerHTML);
-  if (pasDevoir) texte += '\nDevoir(s) : Aucun devoir';
+  if (pasDevoir) texte += '\nDevoir : Aucun devoir';
   else if (devoir) {
     const dLines = devoir.replace(/\n{2,}/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
-    if (dLines.length <= 1) texte += '\nDevoir(s) : ' + (dLines[0] || '');
-    else texte += '\nDevoir(s) :\n' + dLines.map(l => '   ' + l).join('\n');
+    const label = plainSectionLabel('Devoir', devoir);
+    if (dLines.length <= 1) texte += `\n${label} : ` + (dLines[0] || '');
+    else texte += `\n${label} :\n` + dLines.map(l => '   ' + l).join('\n');
   }
   if (!pasRappel && rappel) {
     const rLines = rappel.replace(/\n{2,}/g, '\n').split('\n').map(l => l.trim()).filter(Boolean);
-    if (rLines.length <= 1) texte += '\nRappel(s) : ' + (rLines[0] || '');
-    else texte += '\nRappel(s) :\n' + rLines.map(l => '   ' + l).join('\n');
+    const label = plainSectionLabel('Rappel', rappel);
+    if (rLines.length <= 1) texte += `\n${label} : ` + (rLines[0] || '');
+    else texte += `\n${label} :\n` + rLines.map(l => '   ' + l).join('\n');
   }
   return texte.trim();
 }
@@ -2429,18 +2440,18 @@ function buildSupplyWorkTextFromCourse() {
     if (html) html += '<br>';
     const dLines = devoir.split('\n').map(l => l.trim()).filter(Boolean);
     if (dLines.length <= 1) {
-      html += `<div><strong><u>Devoir(s) :</u></strong> ${escapeHtml(dLines[0] || '')}</div>`;
+      html += `<div><strong><u>${plainSectionLabel('Devoir', devoir)} :</u></strong> ${escapeHtml(dLines[0] || '')}</div>`;
     } else {
-      html += `<div><strong><u>Devoir(s) :</u></strong></div>`;
+      html += `<div><strong><u>${plainSectionLabel('Devoir', devoir)} :</u></strong></div>`;
       dLines.forEach(l => { html += `<div style="margin-left:1.5em">${escapeHtml(l)}</div>`; });
     }
   }
   if (rappel) {
     const rLines = rappel.split('\n').map(l => l.trim()).filter(Boolean);
     if (rLines.length <= 1) {
-      html += `<div><strong><u>Rappel(s) :</u></strong> ${escapeHtml(rLines[0] || '')}</div>`;
+      html += `<div><strong><u>${plainSectionLabel('Rappel', rappel)} :</u></strong> ${escapeHtml(rLines[0] || '')}</div>`;
     } else {
-      html += `<div><strong><u>Rappel(s) :</u></strong></div>`;
+      html += `<div><strong><u>${plainSectionLabel('Rappel', rappel)} :</u></strong></div>`;
       rLines.forEach(l => { html += `<div style="margin-left:1.5em">${escapeHtml(l)}</div>`; });
     }
   }

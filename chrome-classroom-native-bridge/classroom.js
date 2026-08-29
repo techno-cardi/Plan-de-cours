@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.6';
+  const VERSION = '1.0.7';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const fold = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -116,7 +116,7 @@
       }, 7000);
       if (!pasted) throw new Error('le vrai collage riche n’a pas été reconnu');
       const titleUnderlined = Array.from(editor.querySelectorAll('u')).some(node => fold(node.textContent).includes(fold(job.title)) && (node.closest('b,strong') || node.parentElement?.closest('b,strong')));
-      const devoirBold = Array.from(editor.querySelectorAll('b,strong')).some(node => /devoir\(s\)/i.test(node.textContent || ''));
+      const devoirBold = Array.from(editor.querySelectorAll('b,strong')).some(node => /devoirs?/i.test(node.textContent || ''));
       if (!titleUnderlined || !devoirBold) throw new Error('la mise en forme riche n’a pas été conservée');
 
       const dialog = editor.closest('[data-is-edit-mode="true"]') || editor.closest('[role="dialog"]');
