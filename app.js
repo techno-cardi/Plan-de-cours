@@ -1912,7 +1912,7 @@ function extractActivitiesFromPublishedPlan(text) {
   for (const rawLine of lines.slice(1)) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (/^(?:devoirs?|rappels?)\s*:/i.test(line)) break;
+    if (/^(?:devoir(?:\(s\)|s?)|rappel(?:\(s\)|s?))\s*:/i.test(line)) break;
     const marker = NUMERO_EMOJIS.find(value => line.startsWith(value));
     if (marker) {
       if (current) activities.push(current);
