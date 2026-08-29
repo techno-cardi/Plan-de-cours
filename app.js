@@ -56,6 +56,9 @@ const APP_MARKER = 'CARDINAL_ROY_PLAN_COURS_V1';
 const GOOGLE_SESSION_KEY = 'cardinal_google_session_v1';
 const LOCAL_PLAN_KEY = 'cardinal_plan_form_state_v2';
 const LOCAL_PLAN_BACKUP_KEY = 'cardinal_plan_form_state_backup_v1';
+const CLASSROOM_GROUP_HISTORY_KEY = 'cardinal_classroom_group_history_v1';
+const CLASSROOM_GROUP_HISTORY_BACKUP_KEY = 'cardinal_classroom_group_history_backup_v1';
+const RECENT_EMOJI_SETS_KEY = 'cardinal_recent_emoji_sets_v1';
 const KEEP_FORM_PREF_KEY = 'cardinal_keep_form_filled_v1';
 const PRIVILEGED_EMOJI_EMAIL = 'tremblay.kevin@cscapitale.qc.ca';
 const SUPPLY_PROFILE_PREFIX = 'cardinal_supply_profile_v1_';
@@ -84,6 +87,7 @@ let latestGeneratedText = '';
 let latestGeneratedHtml = '';
 let activeActivityEditor = null;
 let selectedBankText = null;
+let activeEmojiGroup = 'general';
 const SUPPLY_RULES_DEFAULT = [
   "Pas de sortie aux toilettes ou pour aller boire de l’eau",
   "Pas d’appareils électroniques",
@@ -529,17 +533,30 @@ function toggleRappel() {
   sauvegarderPlanLocal();
 }
 
-function getEmojis() {
+function getEmojis(context = activeEmojiGroup || 'general') {
   const mois = dpDate.getMonth();
   const pool = EMOJIS_MOIS[mois];
-  // Shuffle (Fisher-Yates) then pick 5-6
-  const arr = [...pool];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+  let recent = {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECENT_EMOJI_SETS_KEY) || '{}');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) recent = parsed;
+  } catch (_) { /* repartir avec un historique vide */ }
+  const historyKey = `${context}:${mois}`;
+  const previousSets = Array.isArray(recent[historyKey]) ? recent[historyKey] : [];
+  let selection = '';
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const arr = [...pool];
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    const count = 5 + Math.floor(Math.random() * 2);
+    selection = arr.slice(0, count).join('');
+    if (!previousSets.includes(selection)) break;
   }
-  const count = 5 + Math.floor(Math.random() * 2); // 5 or 6
-  return arr.slice(0, count).join('');
+  recent[historyKey] = [selection, ...previousSets.filter(value => value !== selection)].slice(0, 8);
+  localStorage.setItem(RECENT_EMOJI_SETS_KEY, JSON.stringify(recent));
+  return selection;
 }
 
 // ── Dernier numéro de cours utilisé ──
@@ -1832,6 +1849,138 @@ async function saveActivitiesToBank(entries) {
 }
 const QUICK_CLASSROOM_GROUPS = ['31', '32', '51'];
 let quickClassroomPublishInProgress = false;
+let pendingQuickClassroomPublication = null;
+let quickClassroomResultTimer = null;
+
+function normalizeCourseActivityForComparison(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, ' ')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function courseActivitySimilarity(previousActivities, currentActivities) {
+  const previous = (Array.isArray(previousActivities) ? previousActivities : []).map(normalizeCourseActivityForComparison).filter(Boolean);
+  const current = (Array.isArray(currentActivities) ? currentActivities : []).map(normalizeCourseActivityForComparison).filter(Boolean);
+  if (!previous.length || !current.length) return 0;
+  const previousTokens = new Set(previous.join(' ').split(' ').filter(Boolean));
+  const currentTokens = new Set(current.join(' ').split(' ').filter(Boolean));
+  const union = new Set([...previousTokens, ...currentTokens]);
+  const intersection = [...previousTokens].filter(token => currentTokens.has(token)).length;
+  const tokenScore = union.size ? intersection / union.size : 0;
+  const previousSet = new Set(previous);
+  const exactMatches = current.filter(activity => previousSet.has(activity)).length;
+  const activityScore = exactMatches / Math.max(previous.length, current.length);
+  return Math.max(tokenScore, activityScore);
+}
+
+function getCurrentCourseActivitiesForHistory() {
+  return [...document.querySelectorAll('.activity-row .rich-editor')]
+    .map(editor => htmlVersTexteClassroom(editor.innerHTML).trim())
+    .filter(Boolean);
+}
+
+function readClassroomGroupHistory() {
+  for (const key of [CLASSROOM_GROUP_HISTORY_KEY, CLASSROOM_GROUP_HISTORY_BACKUP_KEY]) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    } catch (_) { /* essayer la sauvegarde de secours */ }
+  }
+  return {};
+}
+
+function writeClassroomGroupHistory(history) {
+  const current = localStorage.getItem(CLASSROOM_GROUP_HISTORY_KEY);
+  if (current) localStorage.setItem(CLASSROOM_GROUP_HISTORY_BACKUP_KEY, current);
+  localStorage.setItem(CLASSROOM_GROUP_HISTORY_KEY, JSON.stringify(history));
+}
+
+function extractActivitiesFromPublishedPlan(text) {
+  const lines = String(text || '').replace(/\r/g, '').split('\n');
+  const activities = [];
+  let current = '';
+  for (const rawLine of lines.slice(1)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (/^(?:devoir|rappel)\(s\)\s*:/i.test(line)) break;
+    const marker = NUMERO_EMOJIS.find(value => line.startsWith(value));
+    if (marker) {
+      if (current) activities.push(current);
+      current = line.slice(marker.length).trim();
+    } else if (current) {
+      current += ` ${line}`;
+    }
+  }
+  if (current) activities.push(current);
+  return activities;
+}
+
+async function syncClassroomGroupBaseline(group, courseId) {
+  const history = readClassroomGroupHistory();
+  const local = history[String(group)] || null;
+  try {
+    const data = await apiFetch(`https://classroom.googleapis.com/v1/courses/${encodeURIComponent(courseId)}/announcements?orderBy=updateTime%20desc&pageSize=100`);
+    const latestPlan = (data.announcements || []).find(announcement => /^\s*Cours\s*#\s*\d+/i.test(String(announcement.text || '')));
+    if (!latestPlan) return { verified: true, baseline: local };
+    const number = Number.parseInt(String(latestPlan.text).match(/^\s*Cours\s*#\s*(\d+)/i)?.[1] || '', 10);
+    if (!Number.isInteger(number) || number < 1) return { verified: true, baseline: local };
+    if (!local || number > Number(local.lastPublishedNumber || 0)) {
+      history[String(group)] = {
+        lastPublishedNumber: number,
+        activities: extractActivitiesFromPublishedPlan(latestPlan.text),
+        courseId: String(courseId),
+        publishedAt: latestPlan.updateTime || latestPlan.creationTime || new Date().toISOString()
+      };
+      writeClassroomGroupHistory(history);
+    }
+    return { verified: true, baseline: history[String(group)] };
+  } catch (error) {
+    console.warn(`Dernier numéro Classroom indisponible pour le groupe ${group}`, error);
+    return { verified: false, baseline: local };
+  }
+}
+
+function chooseCourseNumberForGroup(group, activities) {
+  const history = readClassroomGroupHistory();
+  const previous = history[String(group)] || null;
+  const input = document.getElementById('num-cours');
+  const entered = Number.parseInt(input?.value || '', 10);
+  let number = Number.isInteger(entered) && entered > 0 ? entered : 1;
+  let changed = false;
+  let similarity = null;
+  if (previous && Number.isInteger(Number(previous.lastPublishedNumber)) && Number(previous.lastPublishedNumber) > 0) {
+    similarity = courseActivitySimilarity(previous.activities, activities);
+    changed = activities.length > 0 && Array.isArray(previous.activities) && previous.activities.length > 0 && similarity < 0.7;
+    number = Number(previous.lastPublishedNumber) + (changed ? 1 : 0);
+  }
+  if (input) input.value = String(number);
+  const withoutNumber = document.getElementById('sans-numero');
+  if (withoutNumber) withoutNumber.checked = false;
+  toggleSansNumero();
+  saveNumCours(number);
+  sauvegarderPlanLocal();
+  return { number, changed, similarity };
+}
+
+function rememberPublishedCourseForGroup(publication) {
+  const history = readClassroomGroupHistory();
+  history[String(publication.group)] = {
+    lastPublishedNumber: Number(publication.number),
+    activities: publication.activities.slice(),
+    courseId: String(publication.courseId || ''),
+    publishedAt: new Date().toISOString()
+  };
+  writeClassroomGroupHistory(history);
+}
+
+function finishQuickClassroomPublication() {
+  clearTimeout(quickClassroomResultTimer);
+  quickClassroomResultTimer = null;
+  quickClassroomPublishInProgress = false;
+  pendingQuickClassroomPublication = null;
+  updateQuickClassroomButtons();
+}
 
 function classroomCourseScoreGroup(course, group) {
   const raw = `${course?.name || ''} ${course?.section || ''}`
@@ -1869,22 +2018,11 @@ function updateQuickClassroomButtons() {
       ? `Publier dans ${course.name}${course.section ? ' - ' + course.section : ''}`
       : `Aucun cours Classroom actif correspondant au groupe ${group}`;
   });
-  const status = document.getElementById('quick-classroom-status');
-  if (!status) return;
-  if (!googleAccessToken) {
-    status.textContent = 'Connectez-vous à Google pour activer la publication en un clic.';
-    return;
-  }
-  const found = QUICK_CLASSROOM_GROUPS.filter(g => getClassroomCourseForGroup(g));
-  status.textContent = found.length
-    ? `Prêts : ${found.map(g => `${g} → ${getClassroomCourseForGroup(g)?.name || `Groupe ${g}`}`).join(' · ')}`
-    : 'Aucun des groupes 31, 32 ou 51 n’a été retrouvé dans les cours Classroom actifs.';
 }
 
 async function publishPlanToGroup(group) {
   const course = getClassroomCourseForGroup(group);
   const btn = document.getElementById(`btn-publish-group-${group}`);
-  const status = document.getElementById('quick-classroom-status');
 
   if (!googleAccessToken) {
     showToast('Connectez-vous à Google avant de publier dans Classroom.', 'warn', 3500);
@@ -1909,10 +2047,17 @@ async function publishPlanToGroup(group) {
 
   const original = btn?.textContent || `Groupe ${group}`;
   if (btn) { btn.disabled = true; btn.textContent = 'Préparation…'; }
-  if (status) status.textContent = `Préparation du plan pour le groupe ${group}…`;
 
+  let handedOff = false;
   try {
     quickClassroomPublishInProgress = true;
+    const activities = getCurrentCourseActivitiesForHistory();
+    const baseline = await syncClassroomGroupBaseline(group, String(course.id));
+    if (!baseline.verified && !baseline.baseline) {
+      throw new Error(`Impossible de vérifier le dernier numéro publié dans le groupe ${group}.`);
+    }
+    const numbering = chooseCourseNumberForGroup(group, activities);
+    activeEmojiGroup = String(group);
     latestGeneratedText = '';
     latestGeneratedHtml = '';
     await generer();
@@ -1924,8 +2069,17 @@ async function publishPlanToGroup(group) {
     const select = document.getElementById('classroom-course-select');
     if (select) select.value = String(course.id);
 
+    const requestId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    pendingQuickClassroomPublication = {
+      requestId,
+      group: String(group),
+      courseId: String(course.id),
+      number: numbering.number,
+      activities
+    };
     document.dispatchEvent(new CustomEvent('pdc:publish-course', {
       detail: {
+        requestId,
         courseId: String(course.id),
         group: String(group),
         courseName: course.name || '',
@@ -1934,22 +2088,40 @@ async function publishPlanToGroup(group) {
       }
     }));
 
-    if (btn) btn.textContent = 'Ouverture…';
-    if (status) status.textContent = `Ouverture de Classroom - groupe ${group}…`;
-    setTimeout(() => {
-      if (btn) btn.textContent = original;
-      updateQuickClassroomButtons();
-    }, 3500);
+    handedOff = true;
+    if (btn) btn.textContent = 'Publication…';
+    quickClassroomResultTimer = setTimeout(() => {
+      if (pendingQuickClassroomPublication?.requestId !== requestId) return;
+      showToast('Classroom n’a pas confirmé la publication. Aucun numéro n’a été avancé.', 'err', 5000);
+      finishQuickClassroomPublication();
+    }, 120000);
   } catch (err) {
     console.error('Publication rapide Classroom', err);
     if (btn) btn.textContent = original;
     updateQuickClassroomButtons();
-    if (status) status.textContent = `Échec de préparation pour le groupe ${group}.`;
     showToast('Impossible de préparer le plan pour Classroom.', 'err', 4000);
   } finally {
-    quickClassroomPublishInProgress = false;
+    activeEmojiGroup = 'general';
+    if (!handedOff) quickClassroomPublishInProgress = false;
   }
 }
+
+document.addEventListener('pdc:publish-result', event => {
+  const result = event.detail || {};
+  const pending = pendingQuickClassroomPublication;
+  if (!pending || String(result.requestId || '') !== pending.requestId) return;
+  if (result.outcome === 'published') {
+    rememberPublishedCourseForGroup(pending);
+    showToast(`Cours #${pending.number} publié dans le groupe ${pending.group}.`, 'ok', 4500);
+  } else if (result.outcome === 'duplicate') {
+    const history = readClassroomGroupHistory();
+    if (!history[pending.group]) rememberPublishedCourseForGroup(pending);
+    showToast(`Ce cours est déjà publié dans le groupe ${pending.group}.`, 'ok', 4000);
+  } else {
+    showToast(`Publication non terminée : ${result.error || 'erreur Classroom'}.`, 'err', 5000);
+  }
+  finishQuickClassroomPublication();
+});
 
 document.addEventListener('DOMContentLoaded', updateQuickClassroomButtons);
 

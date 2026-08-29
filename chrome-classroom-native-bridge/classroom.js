@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.1';
+  const VERSION = '1.0.2';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const fold = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -80,7 +80,7 @@
       await waitFor(() => document.body?.innerText?.includes(job.courseName || `Groupe ${job.group}`), 12000);
       if (duplicateVisible(job)) {
         showBanner('Ce plan est déjà visible dans ce groupe; aucune nouvelle annonce n’a été créée.', 'ok');
-        await send({ type: 'complete' });
+        await send({ type: 'complete', outcome: 'duplicate' });
         return;
       }
 
@@ -116,7 +116,7 @@
       const visible = await waitFor(() => !document.body.contains(editor) && fold(document.body.innerText).includes(fold(job.title)), 30000, 250);
       if (!visible) throw new Error('publication non retrouvée dans le flux visible');
       showBanner(`Plan riche publié et vérifié dans ${job.courseName || `Groupe ${job.group}`}.`, 'ok');
-      await send({ type: 'complete' });
+      await send({ type: 'complete', outcome: 'published' });
     } catch (error) {
       console.error('[Plan de cours — pont natif Classroom]', error);
       showBanner(`${error?.message || error}. Aucun autre éditeur ne sera ouvert automatiquement.`, 'error');

@@ -1,5 +1,6 @@
 const JOB_KEY = 'pdcNativeClassroomJob';
 const MAX_AGE_MS = 5 * 60 * 1000;
+const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
 
 function validGeneratorSender(sender) {
   try { return new URL(sender.tab?.url || '').origin === 'https://techno-cardi.github.io'; }
@@ -17,6 +18,20 @@ async function readJob() {
 
 async function writeJob(job) {
   await chrome.storage.local.set({ [JOB_KEY]: job });
+}
+
+async function finishJob(job, outcome, error = '') {
+  await chrome.tabs.sendMessage(job.sourceTabId, {
+    type: RESULT,
+    requestId: job.requestId,
+    group: job.group,
+    outcome,
+    error
+  }).catch(() => {});
+  await chrome.storage.local.remove(JOB_KEY);
+  if (job.classroomTabId && job.classroomTabId !== job.sourceTabId) {
+    await chrome.tabs.remove(job.classroomTabId).catch(() => {});
+  }
 }
 
 async function withDebugger(tabId, action) {
@@ -83,7 +98,7 @@ async function handleMessage(message, sender) {
       status: 'opening'
     };
     await writeJob(job);
-    const classroomTab = await chrome.tabs.create({ url: job.alternateLink, active: true });
+    const classroomTab = await chrome.tabs.create({ url: job.alternateLink, active: false });
     job.classroomTabId = classroomTab.id;
     await writeJob(job);
     return { ok: true };
@@ -115,12 +130,13 @@ async function handleMessage(message, sender) {
     return { ok: true };
   }
   if (message.type === 'complete') {
-    await chrome.storage.local.remove(JOB_KEY);
+    const outcome = message.outcome === 'duplicate' ? 'duplicate' : 'published';
+    await finishJob(job, outcome);
     return { ok: true };
   }
   if (message.type === 'fail') {
-    Object.assign(job, { status: 'failed', error: String(message.error || 'erreur inconnue'), failedAt: Date.now() });
-    await writeJob(job);
+    const error = String(message.error || 'erreur inconnue');
+    await finishJob(job, 'failed', error);
     return { ok: true };
   }
   return { ok: false, error: 'commande inconnue' };
