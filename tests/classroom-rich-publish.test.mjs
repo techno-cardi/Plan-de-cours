@@ -19,13 +19,17 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.0');
+assert.equal(manifest.version, '1.0.1');
 assert.deepEqual(manifest.permissions.sort(), ['debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.1'/);
 assert.match(nativeBackground, /Input\.dispatchKeyEvent/);
 assert.match(nativeBackground, /Input\.dispatchMouseEvent/);
 assert.match(nativeBackground, /une publication Classroom est déjà en cours/);
 assert.match(nativeClassroom, /duplicateVisible/);
+assert.match(nativeClassroom, /getAttribute\('aria-label'\)/);
+assert.match(nativeClassroom, /\[jsname="V67aGc"\],span/);
+assert.match(nativeClassroom, /\[data-is-edit-mode="true"\]/);
 assert.match(nativeClassroom, /titleUnderlined/);
 assert.match(nativeClassroom, /devoirBold/);
 assert.match(nativeClassroom, /Aucun autre éditeur ne sera ouvert automatiquement/);
@@ -94,11 +98,29 @@ assert.equal(routingContext.score({ name: 'Français SAÉ — Groupe 51', sectio
 assert.equal(routingContext.score({ name: 'Français SAÉ — Groupe 31', section: '' }, '51'), 0);
 
 assert.match(app, /LOCAL_PLAN_BACKUP_KEY/);
+assert.match(app, /function setCourseDateFromState/);
+assert.match(app, /setCourseDateFromState\(state\)/);
 assert.match(app, /loadedCourseId: currentLoadedCourseId/);
 assert.match(app, /loadedSupplyId: currentLoadedSupplyId/);
 assert.match(app, /seenCourseIdentities/);
 assert.match(app, /seenSupplyIdentities/);
 assert.match(app, /seenActivities/);
 assert.match(app, /'supply-links'/);
+
+const dateRestoreStart = app.indexOf('function setCourseDateFromState');
+const dateRestoreEnd = app.indexOf('function initDate', dateRestoreStart);
+const dateRestoreSource = dateRestoreStart >= 0 && dateRestoreEnd > dateRestoreStart ? app.slice(dateRestoreStart, dateRestoreEnd).trim() : '';
+assert.ok(dateRestoreSource, 'Restauration de date locale absente');
+const dateInput = { value: '' };
+const dateContext = {
+  MOIS_NOMS: ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'],
+  document: { getElementById() { return dateInput; } }
+};
+vm.createContext(dateContext);
+vm.runInContext(`let dpDate = new Date(); function formatDateStr(d) { return \`${'${d.getDate()} ${MOIS_NOMS[d.getMonth()]} ${d.getFullYear()}'}\`; } ${dateRestoreSource}; this.restoreDate = setCourseDateFromState;`, dateContext);
+dateContext.restoreDate({ dateISO: '2026-08-28T12:00:00.000Z', dateDisplay: '28 août 2026' });
+assert.equal(dateInput.value, '28 août 2026');
+dateContext.restoreDate({ dateDisplay: '7 septembre 2026' });
+assert.equal(dateInput.value, '7 septembre 2026');
 
 console.log('Tests Classroom, routage et persistance: OK');

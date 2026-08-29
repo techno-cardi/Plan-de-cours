@@ -191,6 +191,25 @@ function setCourseDateToToday() {
   document.getElementById('date-cours').value = formatDateStr(dpDate);
 }
 
+function setCourseDateFromState(state) {
+  let restored = null;
+  const iso = String(state?.dateISO || '').trim();
+  if (iso) {
+    const parsed = new Date(iso);
+    if (!isNaN(parsed)) restored = parsed;
+  }
+  if (!restored) {
+    const match = String(state?.dateDisplay || '').trim().match(/^(\d{1,2})\s+(.+?)\s+(\d{4})$/u);
+    if (match) {
+      const month = MOIS_NOMS.findIndex(name => name.toLocaleLowerCase('fr') === match[2].toLocaleLowerCase('fr'));
+      const candidate = month >= 0 ? new Date(Number(match[3]), month, Number(match[1]), 12) : null;
+      if (candidate && !isNaN(candidate)) restored = candidate;
+    }
+  }
+  dpDate = restored || new Date();
+  document.getElementById('date-cours').value = formatDateStr(dpDate);
+}
+
 function initDate() {
   setCourseDateToToday();
 }
@@ -1277,7 +1296,7 @@ function getCurrentCourseState() {
 }
 
 function fillFormFromCourseState(state) {
-  setCourseDateToToday();
+  setCourseDateFromState(state);
   document.getElementById('num-cours').value = state.courseNumber || '';
   document.getElementById('sans-numero').checked = !!state.sansNumero;
   document.getElementById('avec-emojis').checked = state.avecEmojis !== false;
@@ -2126,7 +2145,7 @@ function restaurerPlanLocal() {
 
     if (state.schoolKey) applySchoolSelection(state.schoolKey);
 
-    setCourseDateToToday();
+    setCourseDateFromState(state);
 
     document.getElementById('num-cours').value = state.courseNumber || '';
     document.getElementById('sans-numero').checked = !!state.sansNumero;

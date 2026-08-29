@@ -3,7 +3,7 @@
 
   const REQUEST = 'PDC_NATIVE_PUBLISH_REQUEST';
   const ACK = 'PDC_NATIVE_PUBLISH_ACK';
-  document.documentElement.dataset.pdcNativePublisherVersion = '1.0.0';
+  document.documentElement.dataset.pdcNativePublisherVersion = '1.0.1';
 
   window.addEventListener('message', event => {
     if (event.source !== window || event.origin !== location.origin || event.data?.type !== REQUEST) return;

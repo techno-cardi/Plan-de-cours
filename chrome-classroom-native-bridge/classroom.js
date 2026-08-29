@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.0.1';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const fold = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -35,8 +35,21 @@
     return null;
   }
 
+  function visibleButtons(label, root = document) {
+    const target = fold(label);
+    return Array.from(root.querySelectorAll('button,[role="button"]')).filter(button => {
+      if (!button.getClientRects().length) return false;
+      const labels = [
+        button.getAttribute('aria-label'),
+        button.getAttribute('title'),
+        ...Array.from(button.querySelectorAll('[jsname="V67aGc"],span')).map(node => node.textContent)
+      ];
+      return labels.some(value => fold(value) === target);
+    });
+  }
+
   function visibleButton(label, root = document) {
-    return Array.from(root.querySelectorAll('button')).find(button => fold(button.textContent) === fold(label) && button.getClientRects().length) || null;
+    return visibleButtons(label, root)[0] || null;
   }
 
   function duplicateVisible(job) {
@@ -90,10 +103,10 @@
       const devoirBold = Array.from(editor.querySelectorAll('b,strong')).some(node => /devoir\(s\)/i.test(node.textContent || ''));
       if (!titleUnderlined || !devoirBold) throw new Error('la mise en forme riche n’a pas été conservée');
 
-      const dialog = editor.closest('[role="dialog"]');
+      const dialog = editor.closest('[data-is-edit-mode="true"]') || editor.closest('[role="dialog"]');
       const publish = await waitFor(() => {
-        const button = visibleButton('Publier', dialog || document);
-        return button && !button.disabled && button.getAttribute('aria-disabled') !== 'true' ? button : null;
+        return visibleButtons('Publier', dialog || document)
+          .find(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
       }, 7000);
       if (!publish) throw new Error('bouton Publier natif inactif');
       await sleep(500);
