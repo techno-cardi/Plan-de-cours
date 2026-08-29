@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.5';
+  const VERSION = '1.0.6';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const fold = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -52,6 +52,16 @@
     return visibleButtons(label, root)[0] || null;
   }
 
+  function newAnnouncementButton() {
+    const target = fold('Nouvelle annonce');
+    const candidates = Array.from(document.querySelectorAll('main button, main [role="button"], button[jsname="Y2vwzf"]'))
+      .filter(button => {
+        const values = [button.textContent, button.getAttribute('aria-label'), button.getAttribute('title')];
+        return values.some(value => fold(value).includes(target));
+      });
+    return candidates.find(button => button.getClientRects().length && !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
+  }
+
   function duplicateVisible(job) {
     const body = fold(document.body?.innerText || '');
     const titleKey = fold(job.title.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, ''));
@@ -84,13 +94,14 @@
         return;
       }
 
-      let newButton = await waitFor(() => visibleButton('Nouvelle annonce'), 12000);
+      let newButton = await waitFor(newAnnouncementButton, 30000, 200);
       if (!newButton) {
         await send({ type: 'activate' });
-        await sleep(900);
-        newButton = await waitFor(() => visibleButton('Nouvelle annonce'), 12000);
+        await sleep(1200);
+        newButton = await waitFor(newAnnouncementButton, 30000, 200);
       }
       if (!newButton) throw new Error('bouton Nouvelle annonce introuvable');
+      newButton.scrollIntoView({ block: 'center', inline: 'nearest' });
       newButton.click();
       const editor = await waitFor(() => document.querySelector('[contenteditable="true"][aria-label*="Annoncez"]'), 10000);
       if (!editor) throw new Error('éditeur natif Classroom introuvable');
