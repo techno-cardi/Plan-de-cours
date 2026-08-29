@@ -2057,6 +2057,11 @@ async function publishPlanToGroup(group) {
       throw new Error(`Impossible de vérifier le dernier numéro publié dans le groupe ${group}.`);
     }
     const numbering = chooseCourseNumberForGroup(group, activities);
+    if (baseline.baseline && numbering.similarity !== null && !numbering.changed) {
+      showToast(`Ce cours est déjà publié dans le groupe ${group}.`, 'ok', 4000);
+      finishQuickClassroomPublication();
+      return;
+    }
     activeEmojiGroup = String(group);
     latestGeneratedText = '';
     latestGeneratedHtml = '';

@@ -52,6 +52,7 @@ assert.doesNotMatch(app, /quick-classroom-status|Prêts :/);
 assert.match(index, /v1\.0\.17/);
 assert.match(app, /MutationObserver\(readNativeClassroomResult\)/);
 assert.match(app, /data-pdc-native-publish-result/);
+assert.match(app, /baseline\.baseline && numbering\.similarity !== null && !numbering\.changed/);
 
 const stored = {};
 const debuggerCommands = [];

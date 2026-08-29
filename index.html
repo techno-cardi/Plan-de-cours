@@ -1509,7 +1509,7 @@
   </div>
 </main>
 
-<script src="app.js?v=1.0.17"></script>
+<script src="app.js?v=1.0.17-final2"></script>
 
 <!-- Confirm reset modal -->
 <div class="confirm-overlay" id="confirm-reset-overlay" onclick="if(event.target===this)closeConfirmReset()">
@@ -1543,6 +1543,7 @@
       <ul>
         <li><strong>Retour fiable</strong> : le bouton de groupe se réactive dès que Chrome confirme la publication ou détecte une annonce identique.</li>
         <li><strong>Aucun blocage visuel</strong> : le résultat traverse aussi l’attribut DOM sécurisé lorsque Tampermonkey isole les événements de la page.</li>
+        <li><strong>Anti-doublon en amont</strong> : un plan déjà présent est arrêté avant l’ouverture de Classroom.</li>
       </ul>
     </div>
 
