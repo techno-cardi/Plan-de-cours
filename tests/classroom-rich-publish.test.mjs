@@ -49,6 +49,9 @@ assert.match(nativeClassroom, /Aucun autre éditeur ne sera ouvert automatiqueme
 assert.doesNotMatch(nativeClassroom, /\.innerHTML\s*=/);
 assert.doesNotMatch(index, /Un clic génère l’aperçu|Prêts :|Automatisation Classroom riche active/);
 assert.doesNotMatch(app, /quick-classroom-status|Prêts :/);
+assert.match(index, /v1\.0\.17/);
+assert.match(app, /MutationObserver\(readNativeClassroomResult\)/);
+assert.match(app, /data-pdc-native-publish-result/);
 
 const stored = {};
 const debuggerCommands = [];

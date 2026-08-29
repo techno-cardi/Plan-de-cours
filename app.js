@@ -2106,8 +2106,7 @@ async function publishPlanToGroup(group) {
   }
 }
 
-document.addEventListener('pdc:publish-result', event => {
-  const result = event.detail || {};
+function handleQuickClassroomResult(result = {}) {
   const pending = pendingQuickClassroomPublication;
   if (!pending || String(result.requestId || '') !== pending.requestId) return;
   if (result.outcome === 'published') {
@@ -2121,7 +2120,27 @@ document.addEventListener('pdc:publish-result', event => {
     showToast(`Publication non terminée : ${result.error || 'erreur Classroom'}.`, 'err', 5000);
   }
   finishQuickClassroomPublication();
+}
+
+document.addEventListener('pdc:publish-result', event => {
+  handleQuickClassroomResult(event.detail || {});
 });
+
+// Les mondes isolés de Tampermonkey ne transmettent pas toujours le détail
+// d'un CustomEvent à la page. Le pont natif recopie donc aussi le résultat
+// dans un attribut DOM, observé directement par l'application.
+function readNativeClassroomResult() {
+  const raw = document.documentElement.dataset.pdcNativePublishResult || '';
+  if (!raw) return;
+  try { handleQuickClassroomResult(JSON.parse(raw)); }
+  catch (_) { /* attendre le prochain résultat complet */ }
+}
+
+new MutationObserver(readNativeClassroomResult).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ['data-pdc-native-publish-result']
+});
+readNativeClassroomResult();
 
 document.addEventListener('DOMContentLoaded', updateQuickClassroomButtons);
 
