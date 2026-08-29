@@ -2013,6 +2013,7 @@ function updateQuickClassroomButtons() {
     if (!btn) return;
     const course = getClassroomCourseForGroup(group);
     btn.disabled = !googleAccessToken || !course;
+    btn.textContent = `Groupe ${group}`;
     btn.dataset.courseId = course?.id ? String(course.id) : '';
     btn.title = course
       ? `Publier dans ${course.name}${course.section ? ' - ' + course.section : ''}`
