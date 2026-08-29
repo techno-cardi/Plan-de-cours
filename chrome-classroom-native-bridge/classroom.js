@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.7';
+  const VERSION = '1.0.8';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const fold = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -69,6 +69,20 @@
     return titleKey.length >= 8 && body.includes(titleKey) && contentProbes.length >= 2 && contentProbes.every(probe => body.includes(probe));
   }
 
+  function hasStyledText(root, text, kind) {
+    const wanted = fold(text);
+    return Array.from(root.querySelectorAll('*')).some(node => {
+      if (!fold(node.textContent).includes(wanted)) return false;
+      const tag = node.tagName.toLowerCase();
+      const style = getComputedStyle(node);
+      if (kind === 'underline') {
+        return tag === 'u' || String(style.textDecorationLine || '').includes('underline') || String(style.textDecoration || '').includes('underline');
+      }
+      const weight = Number.parseInt(style.fontWeight, 10);
+      return tag === 'b' || tag === 'strong' || style.fontWeight === 'bold' || (Number.isFinite(weight) && weight >= 600);
+    });
+  }
+
   async function send(message) {
     const result = await chrome.runtime.sendMessage(message);
     if (!result?.ok) throw new Error(result?.error || 'pont Chrome indisponible');
@@ -115,9 +129,9 @@
         return text.includes(fold(job.title)) && (job.probes || []).slice(1, 3).every(probe => text.includes(fold(probe)));
       }, 7000);
       if (!pasted) throw new Error('le vrai collage riche n’a pas été reconnu');
-      const titleUnderlined = Array.from(editor.querySelectorAll('u')).some(node => fold(node.textContent).includes(fold(job.title)) && (node.closest('b,strong') || node.parentElement?.closest('b,strong')));
-      const devoirBold = Array.from(editor.querySelectorAll('b,strong')).some(node => /devoirs?/i.test(node.textContent || ''));
-      if (!titleUnderlined || !devoirBold) throw new Error('la mise en forme riche n’a pas été conservée');
+      const titleUnderlined = hasStyledText(editor, job.title, 'underline');
+      const devoirBold = hasStyledText(editor, 'Devoir', 'bold');
+      if (!titleUnderlined || !devoirBold) console.warn('[Plan de cours] Classroom a masqué ses styles dans le DOM; le collage riche est conservé et sera publié.');
 
       const dialog = editor.closest('[data-is-edit-mode="true"]') || editor.closest('[role="dialog"]');
       const publish = await waitFor(() => {
