@@ -1925,7 +1925,7 @@ async function syncClassroomGroupBaseline(group, courseId) {
     if (!latestPlan) return { verified: true, baseline: local };
     const number = Number.parseInt(String(latestPlan.text).match(/^\s*Cours\s*#\s*(\d+)/i)?.[1] || '', 10);
     if (!Number.isInteger(number) || number < 1) return { verified: true, baseline: local };
-    if (!local || number > Number(local.lastPublishedNumber || 0)) {
+    if (!local || number !== Number(local.lastPublishedNumber || 0)) {
       history[String(group)] = {
         lastPublishedNumber: number,
         activities: extractActivitiesFromPublishedPlan(latestPlan.text),
