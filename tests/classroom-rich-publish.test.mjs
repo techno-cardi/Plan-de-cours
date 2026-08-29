@@ -118,7 +118,7 @@ const dateContext = {
 };
 vm.createContext(dateContext);
 vm.runInContext(`let dpDate = new Date(); function formatDateStr(d) { return \`${'${d.getDate()} ${MOIS_NOMS[d.getMonth()]} ${d.getFullYear()}'}\`; } ${dateRestoreSource}; this.restoreDate = setCourseDateFromState;`, dateContext);
-dateContext.restoreDate({ dateISO: '2026-08-28T12:00:00.000Z', dateDisplay: '28 août 2026' });
+dateContext.restoreDate({ dateISO: '2026-08-29T12:00:00.000Z', dateDisplay: '28 août 2026' });
 assert.equal(dateInput.value, '28 août 2026');
 dateContext.restoreDate({ dateDisplay: '7 septembre 2026' });
 assert.equal(dateInput.value, '7 septembre 2026');

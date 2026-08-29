@@ -193,18 +193,16 @@ function setCourseDateToToday() {
 
 function setCourseDateFromState(state) {
   let restored = null;
-  const iso = String(state?.dateISO || '').trim();
-  if (iso) {
-    const parsed = new Date(iso);
-    if (!isNaN(parsed)) restored = parsed;
+  const match = String(state?.dateDisplay || '').trim().match(/^(\d{1,2})\s+(.+?)\s+(\d{4})$/u);
+  if (match) {
+    const month = MOIS_NOMS.findIndex(name => name.toLocaleLowerCase('fr') === match[2].toLocaleLowerCase('fr'));
+    const candidate = month >= 0 ? new Date(Number(match[3]), month, Number(match[1]), 12) : null;
+    if (candidate && !isNaN(candidate)) restored = candidate;
   }
   if (!restored) {
-    const match = String(state?.dateDisplay || '').trim().match(/^(\d{1,2})\s+(.+?)\s+(\d{4})$/u);
-    if (match) {
-      const month = MOIS_NOMS.findIndex(name => name.toLocaleLowerCase('fr') === match[2].toLocaleLowerCase('fr'));
-      const candidate = month >= 0 ? new Date(Number(match[3]), month, Number(match[1]), 12) : null;
-      if (candidate && !isNaN(candidate)) restored = candidate;
-    }
+    const iso = String(state?.dateISO || '').trim();
+    const parsed = iso ? new Date(iso) : null;
+    if (parsed && !isNaN(parsed)) restored = parsed;
   }
   dpDate = restored || new Date();
   document.getElementById('date-cours').value = formatDateStr(dpDate);
