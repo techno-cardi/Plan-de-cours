@@ -2934,6 +2934,7 @@ function handleSpecialListTab(event) {
   const item = element?.closest('li');
   if (!item || !editor.contains(item)) return;
   const nested = Boolean(item.parentElement?.closest('li'));
+  const parentItem = nested ? item.parentElement.closest('li') : null;
   if (event.shiftKey ? !nested : !item.previousElementSibling) return;
   event.preventDefault();
   document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
@@ -2941,7 +2942,10 @@ function handleSpecialListTab(event) {
   const postElement = postContainer?.nodeType === Node.ELEMENT_NODE ? postContainer : postContainer?.parentElement;
   const postItem = postElement?.closest('li');
   normalizeNestedLists(editor);
-  const caretItem = postItem?.isConnected ? postItem : (item.isConnected ? item : null);
+  const promotedItem = event.shiftKey && parentItem?.isConnected && parentItem.nextElementSibling?.matches('li')
+    ? parentItem.nextElementSibling
+    : null;
+  const caretItem = promotedItem || (postItem?.isConnected ? postItem : (item.isConnected ? item : null));
   if (caretItem) {
     const caret = document.createRange();
     caret.selectNodeContents(caretItem);
