@@ -2938,6 +2938,13 @@ function handleSpecialListTab(event) {
   event.preventDefault();
   document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
   normalizeNestedLists(editor);
+  if (item.isConnected) {
+    const caret = document.createRange();
+    caret.selectNodeContents(item);
+    caret.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(caret);
+  }
   editor.dataset.defaultBulletApplied = '1';
   editor.dispatchEvent(new Event('input', { bubbles: true }));
 }
