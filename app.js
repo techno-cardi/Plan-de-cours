@@ -750,7 +750,7 @@ function richToStructuredLines(html) {
 function specialSectionLabel(singular, html) {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = html || '';
-  const primaryLists = Array.from(wrapper.querySelectorAll('ul,ol')).filter(list => !list.closest('li'));
+  const primaryLists = Array.from(wrapper.querySelectorAll('ul,ol')).filter(list => !list.parentElement?.closest('ul,ol'));
   const primaryItems = primaryLists.reduce((count, list) => count + Array.from(list.children).filter(child => child.tagName?.toLowerCase() === 'li').length, 0);
   const count = primaryItems || richToStructuredLines(html).filter(line => !line.depth).length;
   return count > 1 ? `${singular}s` : singular;
@@ -2911,6 +2911,13 @@ function ensureDefaultBullet(editor) {
   editor.focus();
 }
 
+function normalizeNestedLists(editor) {
+  Array.from(editor.querySelectorAll('ul > ul, ul > ol, ol > ul, ol > ol')).forEach(list => {
+    const previousItem = list.previousElementSibling;
+    if (previousItem?.tagName?.toLowerCase() === 'li') previousItem.appendChild(list);
+  });
+}
+
 function handleSpecialListTab(event) {
   if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
   const editor = event.currentTarget;
@@ -2924,6 +2931,7 @@ function handleSpecialListTab(event) {
   if (event.shiftKey ? !nested : !item.previousElementSibling) return;
   event.preventDefault();
   document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
+  normalizeNestedLists(editor);
   editor.dataset.defaultBulletApplied = '1';
   editor.dispatchEvent(new Event('input', { bubbles: true }));
 }

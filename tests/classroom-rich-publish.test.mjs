@@ -165,6 +165,8 @@ assert.match(app, /delete editor\.dataset\.defaultBulletApplied/);
 assert.match(app, /insertUnorderedList/);
 assert.match(app, /ensureDefaultBullet\(event\.currentTarget\)/);
 assert.match(app, /function handleSpecialListTab/);
+assert.match(app, /function normalizeNestedLists/);
+assert.match(app, /normalizeNestedLists\(editor\)/);
 assert.match(app, /event\.shiftKey \? 'outdent' : 'indent'/);
 assert.match(app, /primaryItems \|\| richToStructuredLines/);
 assert.match(app, /durableIndent = '&nbsp;'\.repeat\(depth \* 4\)/);
