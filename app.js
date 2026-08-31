@@ -2937,10 +2937,14 @@ function handleSpecialListTab(event) {
   if (event.shiftKey ? !nested : !item.previousElementSibling) return;
   event.preventDefault();
   document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
+  const postContainer = selection.rangeCount ? selection.getRangeAt(0).startContainer : null;
+  const postElement = postContainer?.nodeType === Node.ELEMENT_NODE ? postContainer : postContainer?.parentElement;
+  const postItem = postElement?.closest('li');
   normalizeNestedLists(editor);
-  if (item.isConnected) {
+  const caretItem = postItem?.isConnected ? postItem : (item.isConnected ? item : null);
+  if (caretItem) {
     const caret = document.createRange();
-    caret.selectNodeContents(item);
+    caret.selectNodeContents(caretItem);
     caret.collapse(false);
     selection.removeAllRanges();
     selection.addRange(caret);
