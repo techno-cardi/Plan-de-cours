@@ -161,6 +161,7 @@ assert.match(app, /return \{ verified: true, baseline: null \}/);
 assert.match(app, /La numérotation rapide est indépendante/);
 assert.match(app, /if \(!baseline\.verified\)/);
 assert.match(app, /function ensureDefaultBullet/);
+assert.match(app, /delete editor\.dataset\.defaultBulletApplied/);
 assert.match(app, /insertUnorderedList/);
 assert.match(app, /ensureDefaultBullet\(event\.currentTarget\)/);
 assert.match(app, /function handleSpecialListTab/);

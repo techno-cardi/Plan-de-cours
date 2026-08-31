@@ -2889,11 +2889,12 @@ function formatEditorList(editorId, type) {
 }
 
 function ensureDefaultBullet(editor) {
-  if (!editor || editor.dataset.defaultBulletApplied === '1' || editor.contentEditable === 'false') return;
+  if (!editor || editor.contentEditable === 'false') return;
   if (!editor.innerText.trim()) {
     delete editor.dataset.defaultBulletApplied;
     return;
   }
+  if (editor.dataset.defaultBulletApplied === '1') return;
   if (editor.querySelector('ul,ol')) {
     editor.dataset.defaultBulletApplied = '1';
     return;
