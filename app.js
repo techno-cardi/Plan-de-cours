@@ -2916,6 +2916,12 @@ function normalizeNestedLists(editor) {
     const previousItem = list.previousElementSibling;
     if (previousItem?.tagName?.toLowerCase() === 'li') previousItem.appendChild(list);
   });
+  Array.from(editor.querySelectorAll('li > li')).forEach(item => {
+    const parentItem = item.parentElement;
+    const parentList = parentItem?.parentElement;
+    const listTag = parentList?.tagName?.toLowerCase();
+    if (listTag === 'ul' || listTag === 'ol') parentList.insertBefore(item, parentItem.nextSibling);
+  });
 }
 
 function handleSpecialListTab(event) {
