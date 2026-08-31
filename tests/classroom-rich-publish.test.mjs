@@ -163,6 +163,11 @@ assert.match(app, /if \(!baseline\.verified\)/);
 assert.match(app, /function ensureDefaultBullet/);
 assert.match(app, /insertUnorderedList/);
 assert.match(app, /ensureDefaultBullet\(event\.currentTarget\)/);
+assert.match(app, /function handleSpecialListTab/);
+assert.match(app, /event\.shiftKey \? 'outdent' : 'indent'/);
+assert.match(app, /primaryItems \|\| richToStructuredLines/);
+assert.match(app, /durableIndent = '&nbsp;'\.repeat\(depth \* 4\)/);
+assert.match(index, /v1\.0\.23/);
 
 const extractStart = app.indexOf('function extractActivitiesFromPublishedPlan');
 const extractEnd = app.indexOf('async function syncClassroomGroupBaseline', extractStart);

@@ -706,22 +706,22 @@ function richToStructuredLines(html) {
     probe.innerHTML = fragment || '';
     return (probe.textContent || '').replace(/\u00a0/g, ' ').trim().length > 0;
   }
-  function push(kind, fragment, number = null) {
+  function push(kind, fragment, number = null, depth = 0) {
     const clean = sanitizeInlineFragment(fragment || '');
-    if (hasVisibleText(clean)) lines.push({ kind, html: clean, number });
+    if (hasVisibleText(clean)) lines.push({ kind, html: clean, number, depth });
   }
-  function processList(list, ordered) {
+  function processList(list, ordered, depth = 0) {
     let n = parseInt(list.getAttribute('start') || '1', 10);
     if (!Number.isFinite(n)) n = 1;
     Array.from(list.children).forEach(child => {
       if (child.tagName?.toLowerCase() !== 'li') return;
       const clone = child.cloneNode(true);
       clone.querySelectorAll(':scope > ul, :scope > ol').forEach(nested => nested.remove());
-      push(ordered ? 'number' : 'bullet', clone.innerHTML, ordered ? n++ : null);
+      push(ordered ? 'number' : 'bullet', clone.innerHTML, ordered ? n++ : null, depth);
       Array.from(child.children).forEach(nested => {
         const tag = nested.tagName?.toLowerCase();
-        if (tag === 'ul') processList(nested, false);
-        if (tag === 'ol') processList(nested, true);
+        if (tag === 'ul') processList(nested, false, depth + 1);
+        if (tag === 'ol') processList(nested, true, depth + 1);
       });
     });
   }
@@ -748,7 +748,12 @@ function richToStructuredLines(html) {
 }
 
 function specialSectionLabel(singular, html) {
-  return richToStructuredLines(html).length > 1 ? `${singular}s` : singular;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = html || '';
+  const primaryLists = Array.from(wrapper.querySelectorAll('ul,ol')).filter(list => !list.closest('li'));
+  const primaryItems = primaryLists.reduce((count, list) => count + Array.from(list.children).filter(child => child.tagName?.toLowerCase() === 'li').length, 0);
+  const count = primaryItems || richToStructuredLines(html).filter(line => !line.depth).length;
+  return count > 1 ? `${singular}s` : singular;
 }
 
 function plainSectionLabel(singular, text) {
@@ -765,7 +770,9 @@ function buildSpecialPreview(label, html) {
   let out = `<p class="special"><b>${label} :</b></p>`;
   lines.forEach(line => {
     const prefix = line.kind === 'bullet' ? '- ' : (line.kind === 'number' ? `${line.number}. ` : '');
-    out += `<p style="margin-left:1.8em">${prefix}${line.html}</p>`;
+    const depth = Math.max(0, Number(line.depth) || 0);
+    const durableIndent = '&nbsp;'.repeat(depth * 4);
+    out += `<p style="margin-left:${1.8 + depth * 1.4}em">${durableIndent}${prefix}${line.html}</p>`;
   });
   return out;
 }
@@ -2883,7 +2890,10 @@ function formatEditorList(editorId, type) {
 
 function ensureDefaultBullet(editor) {
   if (!editor || editor.dataset.defaultBulletApplied === '1' || editor.contentEditable === 'false') return;
-  if (!editor.innerText.trim()) return;
+  if (!editor.innerText.trim()) {
+    delete editor.dataset.defaultBulletApplied;
+    return;
+  }
   if (editor.querySelector('ul,ol')) {
     editor.dataset.defaultBulletApplied = '1';
     return;
@@ -2898,6 +2908,23 @@ function ensureDefaultBullet(editor) {
   selection.collapseToEnd();
   editor.dataset.defaultBulletApplied = '1';
   editor.focus();
+}
+
+function handleSpecialListTab(event) {
+  if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return;
+  const editor = event.currentTarget;
+  const selection = window.getSelection();
+  if (!selection || !selection.rangeCount) return;
+  const container = selection.getRangeAt(0).startContainer;
+  const element = container.nodeType === Node.ELEMENT_NODE ? container : container.parentElement;
+  const item = element?.closest('li');
+  if (!item || !editor.contains(item)) return;
+  const nested = Boolean(item.parentElement?.closest('li'));
+  if (event.shiftKey ? !nested : !item.previousElementSibling) return;
+  event.preventDefault();
+  document.execCommand(event.shiftKey ? 'outdent' : 'indent', false, null);
+  editor.dataset.defaultBulletApplied = '1';
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 const toolbar = document.getElementById('format-toolbar');
@@ -3059,6 +3086,8 @@ updateRoleBasedUi();
 setPlanMode('course');
 document.getElementById('devoir').addEventListener('input', (event) => { ensureDefaultBullet(event.currentTarget); sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('rappel').addEventListener('input', (event) => { ensureDefaultBullet(event.currentTarget); sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
+document.getElementById('devoir').addEventListener('keydown', handleSpecialListTab);
+document.getElementById('rappel').addEventListener('keydown', handleSpecialListTab);
 document.getElementById('pas-devoir').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('pas-rappel').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('num-cours').addEventListener('input', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
