@@ -24,10 +24,10 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.9');
+assert.equal(manifest.version, '1.0.10');
 assert.deepEqual(manifest.permissions.sort(), ['alarms', 'debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.9'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.10'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
 assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
 assert.match(nativeGenerator, /pdcNativeRequestAck/);
@@ -45,7 +45,10 @@ assert.match(nativeClassroom, /const retry = visibleButtons\('Publier'/);
 assert.doesNotMatch(nativeClassroom, /duplicateVisible/);
 assert.match(nativeClassroom, /function newAnnouncementButton/);
 assert.match(nativeClassroom, /main button, main \[role="button"\]/);
-assert.match(nativeClassroom, /waitFor\(newAnnouncementButton, 30000/);
+assert.match(nativeClassroom, /function announcementEditor\(\)/);
+assert.match(nativeClassroom, /function openAnnouncementEditor\(\)/);
+assert.match(nativeClassroom, /\[role="dialog"\] \[contenteditable="true"\]\[role="textbox"\]/);
+assert.match(nativeClassroom, /waitFor\(newAnnouncementButton, attempt \? 12000 : 30000/);
 assert.match(nativeClassroom, /getAttribute\('aria-label'\)/);
 assert.match(nativeClassroom, /\[jsname="V67aGc"\],span/);
 assert.match(nativeClassroom, /\[data-is-edit-mode="true"\]/);

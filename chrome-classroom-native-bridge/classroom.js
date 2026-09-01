@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.9';
+  const VERSION = '1.0.10';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let activeRequestId = '';
   let activePhase = 'idle';
@@ -64,6 +64,38 @@
     return candidates.find(button => button.getClientRects().length && !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
   }
 
+  function announcementEditor() {
+    const candidates = Array.from(document.querySelectorAll(
+      '[role="dialog"] [contenteditable="true"][role="textbox"], [contenteditable="true"][aria-label*="Annonce"]'
+    ));
+    return candidates.find(editor => {
+      if (!editor.getClientRects().length) return false;
+      const label = fold(editor.getAttribute('aria-label'));
+      return label.includes('annonce') && !editor.closest('[aria-hidden="true"]');
+    }) || null;
+  }
+
+  async function openAnnouncementEditor() {
+    // Classroom peut afficher le bouton avant que son gestionnaire de clic soit
+    // hydraté. Réutiliser un éditeur déjà ouvert, puis retenter le même bouton
+    // après activation évite l'échec intermittent sans créer de brouillon en trop.
+    let editor = announcementEditor();
+    if (editor) return editor;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let button = await waitFor(newAnnouncementButton, attempt ? 12000 : 30000, 200);
+      if (!button) continue;
+      await send({ type: 'activate' });
+      await sleep(attempt ? 900 : 450);
+      button = newAnnouncementButton() || button;
+      button.scrollIntoView({ block: 'center', inline: 'nearest' });
+      button.focus();
+      button.click();
+      editor = await waitFor(announcementEditor, 8000, 150);
+      if (editor) return editor;
+    }
+    return null;
+  }
+
   function hasStyledText(root, text, kind) {
     const wanted = fold(text);
     return Array.from(root.querySelectorAll('*')).some(node => {
@@ -109,16 +141,7 @@
         return;
       }
       await waitFor(() => document.body?.innerText?.includes(job.courseName || `Groupe ${job.group}`), 12000);
-      let newButton = await waitFor(newAnnouncementButton, 30000, 200);
-      if (!newButton) {
-        await send({ type: 'activate' });
-        await sleep(1200);
-        newButton = await waitFor(newAnnouncementButton, 30000, 200);
-      }
-      if (!newButton) throw new Error('bouton Nouvelle annonce introuvable');
-      newButton.scrollIntoView({ block: 'center', inline: 'nearest' });
-      newButton.click();
-      const editor = await waitFor(() => document.querySelector('[contenteditable="true"][aria-label*="Annoncez"]'), 10000);
+      const editor = await openAnnouncementEditor();
       if (!editor) throw new Error('éditeur natif Classroom introuvable');
       editor.focus();
       editor.click();
