@@ -265,10 +265,14 @@ const dateContext = {
   document: { getElementById() { return dateInput; } }
 };
 vm.createContext(dateContext);
-vm.runInContext(`let dpDate = new Date(); function formatDateStr(d) { return \`${'${d.getDate()} ${MOIS_NOMS[d.getMonth()]} ${d.getFullYear()}'}\`; } ${dateRestoreSource}; this.restoreDate = setCourseDateFromState;`, dateContext);
+vm.runInContext(`let dpDate = new Date(); function formatDateStr(d) { return \`${'${d.getDate()} ${MOIS_NOMS[d.getMonth()]} ${d.getFullYear()}'}\`; } function setCourseDateToToday() { dpDate = new Date(); document.getElementById('date-cours').value = formatDateStr(dpDate); } ${dateRestoreSource}; this.restoreDate = setCourseDateFromState;`, dateContext);
+const today = new Date();
+const expectedToday = `${today.getDate()} ${dateContext.MOIS_NOMS[today.getMonth()]} ${today.getFullYear()}`;
 dateContext.restoreDate({ dateISO: '2026-08-29T12:00:00.000Z', dateDisplay: '28 août 2026' });
-assert.equal(dateInput.value, '28 août 2026');
+assert.equal(dateInput.value, expectedToday);
 dateContext.restoreDate({ dateDisplay: '7 septembre 2026' });
-assert.equal(dateInput.value, '7 septembre 2026');
+assert.equal(dateInput.value, expectedToday);
+assert.match(index, /app\.js\?v=1\.0\.26/);
+assert.match(index, /v1\.0\.26/);
 
 console.log('Tests Classroom, routage et persistance: OK');
