@@ -44,6 +44,10 @@ function switchRightTab(tab) {
   document.getElementById('right-tab-btn-preview').classList.toggle('active', isPreview);
   document.getElementById('right-tab-btn-bank').classList.toggle('active', isBank);
 }
+async function refreshCoursePreview() {
+  switchRightTab('preview');
+  await generer();
+}
 
 const GOOGLE_CLIENT_ID = '1063815453063-ncrcg7ujl935e66r53rf4vhmebvrqch6.apps.googleusercontent.com';
 const GOOGLE_SCOPES = ['openid','email','profile','https://www.googleapis.com/auth/drive','https://www.googleapis.com/auth/spreadsheets','https://www.googleapis.com/auth/classroom.courses.readonly','https://www.googleapis.com/auth/classroom.announcements'].join(' ');

@@ -272,7 +272,10 @@ dateContext.restoreDate({ dateISO: '2026-08-29T12:00:00.000Z', dateDisplay: '28 
 assert.equal(dateInput.value, expectedToday);
 dateContext.restoreDate({ dateDisplay: '7 septembre 2026' });
 assert.equal(dateInput.value, expectedToday);
-assert.match(index, /app\.js\?v=1\.0\.26/);
-assert.match(index, /v1\.0\.26/);
+assert.match(index, /app\.js\?v=1\.0\.27/);
+assert.match(index, /v1\.0\.27/);
+assert.match(index, /onclick="refreshCoursePreview\(\)"/);
+assert.match(app, /async function refreshCoursePreview\(\)/);
+assert.match(app, /await generer\(\)/);
 
 console.log('Tests Classroom, routage et persistance: OK');
