@@ -191,8 +191,17 @@ let dpView = 'days';       // 'days' | 'months' | 'years'
 let dpViewYear = dpDate.getFullYear();
 let dpOpen = false;
 
+function formatFrenchDay(day) {
+  return Number(day) === 1 ? '1er' : String(day);
+}
+
+function normalizeFrenchFirstDay(value) {
+  const months = MOIS_NOMS.join('|');
+  return String(value || '').replace(new RegExp(`\\b1(?:er)?\\s+(?=(${months})\\b)`, 'gi'), '1er ');
+}
+
 function formatDateStr(d) {
-  return `${d.getDate()} ${MOIS_NOMS[d.getMonth()]} ${d.getFullYear()}`;
+  return `${formatFrenchDay(d.getDate())} ${MOIS_NOMS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 function setCourseDateToToday() {
@@ -1302,7 +1311,8 @@ async function refreshBank() {
 }
 
 function buildCourseTitleWithoutEmojis(state) {
-  return state.sansNumero ? `Cours du ${state.dateDisplay}` : `Cours #${state.courseNumber} (${state.dateDisplay})`;
+  const dateDisplay = normalizeFrenchFirstDay(state.dateDisplay);
+  return state.sansNumero ? `Cours du ${dateDisplay}` : `Cours #${state.courseNumber} (${dateDisplay})`;
 }
 
 function getCurrentCourseState() {
@@ -1386,7 +1396,7 @@ async function refreshCourses() {
   });
   const seenCourseIdentities = new Set();
   savedCourses = loadedCourses.filter(course => {
-    const identity = normalizeActivity(course.title);
+    const identity = normalizeActivity(normalizeFrenchFirstDay(course.title));
     if (!identity || seenCourseIdentities.has(identity)) return false;
     seenCourseIdentities.add(identity);
     return true;
@@ -1398,7 +1408,7 @@ function renderCourseOptions() {
   const select = document.getElementById('reuse-course-select');
   if (!select) return;
   const currentValue = select.value;
-  select.innerHTML = '<option value="">Choisir un cours</option>' + savedCourses.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title)}</option>`).join('');
+  select.innerHTML = '<option value="">Choisir un cours</option>' + savedCourses.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(normalizeFrenchFirstDay(c.title))}</option>`).join('');
   if (currentValue && savedCourses.some(c => c.id === currentValue)) select.value = currentValue;
   updateDeleteCourseButton();
 }
@@ -1469,7 +1479,7 @@ async function refreshSupplyPlans() {
   loadedSupplyPlans.sort((a,b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
   const seenSupplyIdentities = new Set();
   savedSupplyPlans = loadedSupplyPlans.filter(plan => {
-    const identity = normalizeActivity(plan.title);
+    const identity = normalizeActivity(normalizeFrenchFirstDay(plan.title));
     if (!identity || seenSupplyIdentities.has(identity)) return false;
     seenSupplyIdentities.add(identity);
     return true;
@@ -1480,7 +1490,7 @@ async function refreshSupplyPlans() {
 function renderSupplyPlanOptions() {
   const select = document.getElementById('reuse-supply-select');
   if (!select) return;
-  select.innerHTML = '<option value="">Choisir une planification</option>' + savedSupplyPlans.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.title)}</option>`).join('');
+  select.innerHTML = '<option value="">Choisir une planification</option>' + savedSupplyPlans.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(normalizeFrenchFirstDay(p.title))}</option>`).join('');
   updateDeleteSupplyButton();
 }
 
@@ -1887,6 +1897,7 @@ function courseActivitySimilarity(previousActivities, currentActivities) {
 
 function normalizePublishedPlanForComparison(value) {
   return String(value || '')
+    .replace(/\b1er\b/gi, '1')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, ' ')
     .toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -2425,7 +2436,7 @@ function restaurerPlanLocal() {
       });
     }
     if (document.getElementById('supply-date')) {
-      document.getElementById('supply-date').value = state.supplyState?.['supply-date'] || formatDateStr(sdpDate);
+      document.getElementById('supply-date').value = normalizeFrenchFirstDay(state.supplyState?.['supply-date'] || formatDateStr(sdpDate));
     }
 
     toggleSansNumero();
@@ -2537,9 +2548,9 @@ function formatSupplyDateForPrint(value) {
   if (!value) return '';
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const [y, m, d] = value.split('-').map(Number);
-    return `${d} ${MOIS_NOMS[m - 1]} ${y}`;
+    return `${formatFrenchDay(d)} ${MOIS_NOMS[m - 1]} ${y}`;
   }
-  return value;
+  return normalizeFrenchFirstDay(value);
 }
 
 const PDF_LIBRARY_URLS = {
