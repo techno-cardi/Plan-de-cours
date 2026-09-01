@@ -78,6 +78,7 @@ let savedCourses = [];
 let suppressCourseAutoSave = false;
 let currentLoadedCourseId = '';
 let currentLoadedSupplyId = '';
+let courseNumberManuallyEdited = false;
 let hasUnsavedPlan = false;
 let _sheetMetaCache = null;
 let _sheetMetaCacheTime = 0;
@@ -1329,6 +1330,7 @@ function getCurrentCourseState() {
 function fillFormFromCourseState(state) {
   setCourseDateFromState(state);
   document.getElementById('num-cours').value = state.courseNumber || '';
+  courseNumberManuallyEdited = false;
   document.getElementById('sans-numero').checked = !!state.sansNumero;
   document.getElementById('avec-emojis').checked = state.avecEmojis !== false;
   document.getElementById('pas-devoir').checked = !!state.pasDevoir;
@@ -1979,14 +1981,34 @@ function chooseCourseNumberForGroup(group, activities) {
   let number = Number.isInteger(entered) && entered > 0 ? entered : 1;
   let changed = false;
   let similarity = null;
+  let intent = 'automatic';
+  const enteredIsValid = Number.isInteger(entered) && entered > 0;
+  const loadedCourse = currentLoadedCourseId
+    ? savedCourses.find(course => course.id === currentLoadedCourseId) || null
+    : null;
+  const explicitNumber = courseNumberManuallyEdited && enteredIsValid;
   if (!previous) {
     // La numérotation rapide est indépendante du dernier numéro d'un autre
     // groupe et commence toujours par le premier cours réel.
-    number = 1;
+    number = explicitNumber ? entered : 1;
+    intent = explicitNumber ? 'manual' : 'first-course';
   } else if (Number.isInteger(Number(previous.lastPublishedNumber)) && Number(previous.lastPublishedNumber) > 0) {
+    const previousNumber = Number(previous.lastPublishedNumber);
     similarity = courseActivitySimilarity(previous.activities, activities);
     changed = activities.length > 0 && Array.isArray(previous.activities) && previous.activities.length > 0 && similarity < 0.7;
-    number = Number(previous.lastPublishedNumber) + (changed ? 1 : 0);
+    const loadedCorrection = loadedCourse && Number(loadedCourse.courseNumber) === previousNumber && entered === previousNumber;
+    if (explicitNumber) {
+      number = entered;
+      intent = entered === previousNumber ? 'manual-correction' : 'manual';
+      if (entered === previousNumber) changed = false;
+    } else if (loadedCorrection) {
+      number = previousNumber;
+      changed = false;
+      intent = 'loaded-correction';
+    } else {
+      number = previousNumber + (changed ? 1 : 0);
+      intent = changed ? 'new-course' : 'automatic-correction';
+    }
   }
   if (input) input.value = String(number);
   const withoutNumber = document.getElementById('sans-numero');
@@ -1994,7 +2016,7 @@ function chooseCourseNumberForGroup(group, activities) {
   toggleSansNumero();
   saveNumCours(number);
   sauvegarderPlanLocal();
-  return { number, changed, similarity };
+  return { number, changed, similarity, intent };
 }
 
 function rememberPublishedCourseForGroup(publication) {
@@ -2103,7 +2125,7 @@ async function publishPlanToGroup(group) {
     }
     const contentFingerprint = normalizePublishedPlanForComparison(latestGeneratedText);
     if (baseline.baseline?.contentFingerprint && baseline.baseline.contentFingerprint === contentFingerprint) {
-      showToast(`Ce plan exact est déjà publié dans le groupe ${group}.`, 'ok', 4000);
+      showToast(`Ce plan exact est déjà publié dans le groupe ${group}. Modifiez-le pour republier le même numéro.`, 'ok', 5000);
       finishQuickClassroomPublication();
       return;
     }
@@ -3060,6 +3082,7 @@ function reinitialiserConfirmed() {
   latestGeneratedHtml = "";
   currentLoadedCourseId = '';
   currentLoadedSupplyId = '';
+  courseNumberManuallyEdited = false;
   dpDate = new Date();
   document.getElementById('date-cours').value = formatDateStr(dpDate);
   // Reset new options
@@ -3129,7 +3152,7 @@ document.getElementById('devoir').addEventListener('keydown', handleSpecialListT
 document.getElementById('rappel').addEventListener('keydown', handleSpecialListTab);
 document.getElementById('pas-devoir').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('pas-rappel').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
-document.getElementById('num-cours').addEventListener('input', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
+document.getElementById('num-cours').addEventListener('input', () => { courseNumberManuallyEdited = true; sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('date-cours').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('sans-numero').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('avec-emojis').addEventListener('change', () => { sauvegarderPlanLocal(); });

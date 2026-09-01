@@ -1509,7 +1509,7 @@
   </div>
 </main>
 
-<script src="app.js?v=1.0.24"></script>
+<script src="app.js?v=1.0.25"></script>
 
 <!-- Confirm reset modal -->
 <div class="confirm-overlay" id="confirm-reset-overlay" onclick="if(event.target===this)closeConfirmReset()">
@@ -1534,8 +1534,18 @@
     <button class="changelog-close" onclick="closeChangelog()" title="Fermer">×</button>
     <h2>Notes de mise à jour</h2>
     <div>
-      <span class="changelog-version-badge">v1.0.24</span>
+      <span class="changelog-version-badge">v1.0.25</span>
       <span class="changelog-date">Septembre 2026</span>
+    </div>
+
+    <div class="changelog-section">
+      <h3>Republication intelligente - v1.0.25</h3>
+      <ul>
+        <li>Un plan strictement identique n’est jamais publié deux fois dans le même groupe.</li>
+        <li>Un plan corrigé peut être republié avec le même numéro.</li>
+        <li>Un numéro choisi manuellement ou provenant d’un cours sauvegardé est respecté, même après une correction importante.</li>
+        <li>La détection et la numérotation restent indépendantes pour les groupes 31, 32 et 51.</li>
+      </ul>
     </div>
 
     <div class="changelog-section">
@@ -1735,7 +1745,7 @@
 
 <footer style="text-align:center;padding:24px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:#aaa;border-top:1px solid #e2ddd8;margin-top:20px;">
   &copy; 2026 Kevin Tremblay &mdash; Équipe des technopédagogues de l'École Cardinal-Roy
-  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.24</button>
+  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.25</button>
   &mdash; <a href="https://raw.githubusercontent.com/techno-cardi/Plan-de-cours/main/Guide%20d'utilisation%20-%20G%C3%A9n%C3%A9rateur%20de%20plan%20de%20cours.pdf" target="_blank" rel="noopener noreferrer" style="color:#aaa;text-decoration:none;font-weight:600;" onmouseover="this.style.color='#C0152A'" onmouseout="this.style.color='#aaa'">📄 Guide d'utilisation</a>
 </footer>
 <div id="toast-container" aria-live="polite" aria-atomic="false"></div>

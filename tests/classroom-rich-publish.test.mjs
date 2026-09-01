@@ -60,6 +60,9 @@ assert.match(app, /MutationObserver\(readNativeClassroomResult\)/);
 assert.match(app, /data-pdc-native-publish-result/);
 assert.match(app, /baseline\.baseline\?\.contentFingerprint && baseline\.baseline\.contentFingerprint === contentFingerprint/);
 assert.doesNotMatch(app, /baseline\.baseline && numbering\.similarity !== null && !numbering\.changed/);
+assert.match(app, /courseNumberManuallyEdited && enteredIsValid/);
+assert.match(app, /'manual-correction'/);
+assert.match(app, /'loaded-correction'/);
 assert.match(app, /btn\.textContent = `Groupe \$\{group\}`/);
 assert.match(app, /function specialSectionLabel/);
 assert.match(app, /specialSectionLabel\('Devoir'/);
@@ -204,7 +207,31 @@ assert.match(app, /querySelectorAll\('li > li'\)/);
 assert.match(app, /event\.shiftKey \? 'outdent' : 'indent'/);
 assert.match(app, /primaryItems \|\| richToStructuredLines/);
 assert.match(app, /durableIndent = '&nbsp;'\.repeat\(depth \* 4\)/);
-assert.match(index, /v1\.0\.24/);
+assert.match(index, /v1\.0\.25/);
+
+const numberingStart = app.indexOf('function chooseCourseNumberForGroup');
+const numberingEnd = app.indexOf('function rememberPublishedCourseForGroup', numberingStart);
+const numberingSource = numberingStart >= 0 && numberingEnd > numberingStart ? app.slice(numberingStart, numberingEnd).trim() : '';
+assert.ok(numberingSource, 'Décision intelligente de numérotation absente');
+function runNumbering({ manual, loaded, entered }) {
+  const input = { value: String(entered) };
+  const withoutNumber = { checked: true };
+  const context = {
+    courseNumberManuallyEdited: manual,
+    currentLoadedCourseId: loaded ? 'saved-2' : '',
+    savedCourses: loaded ? [{ id: 'saved-2', courseNumber: '2' }] : [],
+    readClassroomGroupHistory: () => ({ '31': { lastPublishedNumber: 2, activities: ['Ancienne activité'] } }),
+    courseActivitySimilarity: () => 0.1,
+    document: { getElementById: id => id === 'num-cours' ? input : withoutNumber },
+    toggleSansNumero() {}, saveNumCours() {}, sauvegarderPlanLocal() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(`${numberingSource}; this.choose = chooseCourseNumberForGroup;`, context);
+  return context.choose('31', ['Activité complètement corrigée']);
+}
+assert.deepEqual({ ...runNumbering({ manual: false, loaded: false, entered: 2 }) }, { number: 3, changed: true, similarity: 0.1, intent: 'new-course' });
+assert.deepEqual({ ...runNumbering({ manual: true, loaded: false, entered: 2 }) }, { number: 2, changed: false, similarity: 0.1, intent: 'manual-correction' });
+assert.deepEqual({ ...runNumbering({ manual: false, loaded: true, entered: 2 }) }, { number: 2, changed: false, similarity: 0.1, intent: 'loaded-correction' });
 
 const extractStart = app.indexOf('function extractActivitiesFromPublishedPlan');
 const extractEnd = app.indexOf('async function syncClassroomGroupBaseline', extractStart);
