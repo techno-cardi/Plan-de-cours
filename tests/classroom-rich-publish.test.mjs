@@ -24,10 +24,10 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.8');
-assert.deepEqual(manifest.permissions.sort(), ['debugger', 'storage', 'tabs']);
+assert.equal(manifest.version, '1.0.9');
+assert.deepEqual(manifest.permissions.sort(), ['alarms', 'debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.8'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.9'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
 assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
 assert.match(nativeGenerator, /pdcNativeRequestAck/);
@@ -40,7 +40,9 @@ assert.match(nativeBackground, /windowId: sender\.tab\.windowId/);
 assert.match(nativeBackground, /finishJob/);
 assert.match(nativeBackground, /tabs\.update\(job\.sourceTabId, \{ active: true \}\)/);
 assert.match(nativeClassroom, /type: 'activate'/);
-assert.match(nativeClassroom, /duplicateVisible/);
+assert.match(nativeClassroom, /publish\.click\(\)/);
+assert.match(nativeClassroom, /const retry = visibleButtons\('Publier'/);
+assert.doesNotMatch(nativeClassroom, /duplicateVisible/);
 assert.match(nativeClassroom, /function newAnnouncementButton/);
 assert.match(nativeClassroom, /main button, main \[role="button"\]/);
 assert.match(nativeClassroom, /waitFor\(newAnnouncementButton, 30000/);
@@ -56,7 +58,8 @@ assert.doesNotMatch(app, /quick-classroom-status|Prêts :/);
 assert.match(index, /v1\.0\.17/);
 assert.match(app, /MutationObserver\(readNativeClassroomResult\)/);
 assert.match(app, /data-pdc-native-publish-result/);
-assert.match(app, /baseline\.baseline && numbering\.similarity !== null && !numbering\.changed/);
+assert.match(app, /baseline\.baseline\?\.contentFingerprint && baseline\.baseline\.contentFingerprint === contentFingerprint/);
+assert.doesNotMatch(app, /baseline\.baseline && numbering\.similarity !== null && !numbering\.changed/);
 assert.match(app, /btn\.textContent = `Groupe \$\{group\}`/);
 assert.match(app, /function specialSectionLabel/);
 assert.match(app, /specialSectionLabel\('Devoir'/);
@@ -83,15 +86,21 @@ const backgroundContext = {
     } },
     tabs: {
       async create(options) { createdTabOptions = options; return { id: 202, url: options.url }; },
-      async sendMessage(tabId, message) { tabMessages.push({ tabId, message }); },
+      async get(tabId) { return { id: tabId }; },
+      async sendMessage(tabId, message) {
+        if (message?.type === 'PDC_NATIVE_STATUS') return null;
+        tabMessages.push({ tabId, message });
+      },
       async update(tabId, options) { updatedTabs.push({ tabId, options }); },
-      async remove(tabId) { removedTabs.push(tabId); }
+      async remove(tabId) { removedTabs.push(tabId); },
+      onRemoved: { addListener() {} }
     },
+    alarms: { async create() {}, async clear() {}, onAlarm: { addListener() {} } },
     debugger: {
       async attach() {}, async detach() {},
       async sendCommand(_target, method, params) { debuggerCommands.push({ method, params }); }
     },
-    runtime: { onMessage: { addListener() {} } }
+    runtime: { onMessage: { addListener() {} }, onInstalled: { addListener() {} } }
   }
 };
 vm.createContext(backgroundContext);
@@ -119,6 +128,21 @@ assert.equal(stored.pdcNativeClassroomLastResult.outcome, 'published');
 assert.equal(updatedTabs[0].tabId, 101);
 assert.equal(updatedTabs[0].options.active, true);
 assert.deepEqual(removedTabs, [202]);
+
+stored.pdcNativeClassroomJob = {
+  requestId: 'stuck', createdAt: Date.now() - 10000, updatedAt: Date.now() - 10000,
+  courseId: '875523698222', group: '31', sourceTabId: 101, classroomTabId: 303,
+  status: 'publishing'
+};
+const recovered = await backgroundContext.handleMessage({ type: 'prepare', payload: {
+  requestId: 'r2', createdAt: Date.now(), courseId: '875523698222', group: '31',
+  courseName: 'Français SAÉ — Groupe 31', courseSection: '3e secondaire — Groupe 31',
+  alternateLink: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy',
+  text: 'Cours #2\n\n1️⃣ Activité corrigée', title: 'Cours #2', probes: ['Cours #2', '1️⃣ Activité corrigée']
+} }, { tab: { id: 101, windowId: 77, url: 'https://techno-cardi.github.io/Plan-de-cours/' } });
+assert.equal(recovered.ok, true, 'Une tâche qui ne répond plus doit être remplacée automatiquement');
+assert.equal(stored.pdcNativeClassroomJob.requestId, 'r2');
+assert.ok(removedTabs.includes(303));
 
 const sanitizerStart = userscript.indexOf('function decodeHtmlText');
 const sanitizerEnd = userscript.indexOf('function installGeneratorBridge', sanitizerStart);
@@ -154,6 +178,15 @@ vm.createContext(similarityContext);
 vm.runInContext(`${similaritySource}; this.similarity = courseActivitySimilarity;`, similarityContext);
 assert.ok(similarityContext.similarity(['Lecture de la nouvelle « Le Horla » 📚', 'Questions 1 à 5'], ['Lecture de la nouvelle Le Horla', 'Questions 1 à 5']) >= 0.99);
 assert.ok(similarityContext.similarity(['Lecture du Horla', 'Questions 1 à 5'], ['Laboratoire de robotique', 'Programmation des moteurs']) < 0.7);
+const fingerprintStart = app.indexOf('function normalizePublishedPlanForComparison');
+const fingerprintEnd = app.indexOf('function getCurrentCourseActivitiesForHistory', fingerprintStart);
+const fingerprintSource = fingerprintStart >= 0 && fingerprintEnd > fingerprintStart ? app.slice(fingerprintStart, fingerprintEnd).trim() : '';
+assert.ok(fingerprintSource, 'Comparaison du plan complet absente');
+const fingerprintContext = {};
+vm.createContext(fingerprintContext);
+vm.runInContext(`${fingerprintSource}; this.fingerprint = normalizePublishedPlanForComparison;`, fingerprintContext);
+assert.equal(fingerprintContext.fingerprint('Cours #2 🍂\nDevoir : Lire'), fingerprintContext.fingerprint('Cours #2 📚\nDevoir : Lire'));
+assert.notEqual(fingerprintContext.fingerprint('Cours #2\nDevoir : Lire'), fingerprintContext.fingerprint('Cours #2\nDevoir : Écrire'));
 assert.match(app, /CLASSROOM_GROUP_HISTORY_BACKUP_KEY/);
 assert.match(app, /result\.outcome === 'published'/);
 assert.match(app, /announcements\?orderBy=updateTime%20desc&pageSize=100/);
@@ -171,7 +204,7 @@ assert.match(app, /querySelectorAll\('li > li'\)/);
 assert.match(app, /event\.shiftKey \? 'outdent' : 'indent'/);
 assert.match(app, /primaryItems \|\| richToStructuredLines/);
 assert.match(app, /durableIndent = '&nbsp;'\.repeat\(depth \* 4\)/);
-assert.match(index, /v1\.0\.23/);
+assert.match(index, /v1\.0\.24/);
 
 const extractStart = app.indexOf('function extractActivitiesFromPublishedPlan');
 const extractEnd = app.indexOf('async function syncClassroomGroupBaseline', extractStart);

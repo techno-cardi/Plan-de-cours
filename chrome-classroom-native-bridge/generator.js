@@ -5,7 +5,7 @@
   const ACK = 'PDC_NATIVE_PUBLISH_ACK';
   const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
   const LAST_RESULT_KEY = 'pdcNativeClassroomLastResult';
-  document.documentElement.dataset.pdcNativePublisherVersion = '1.0.8';
+  document.documentElement.dataset.pdcNativePublisherVersion = '1.0.9';
   let lastDeliveredResult = '';
 
   function deliverResult(message) {

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Plan de cours — Pont natif Classroom",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Publie les plans riches avec l’éditeur natif de Google Classroom.",
-  "permissions": ["debugger", "storage", "tabs"],
+  "permissions": ["alarms", "debugger", "storage", "tabs"],
   "host_permissions": [
     "https://techno-cardi.github.io/Plan-de-cours/*",
     "https://classroom.google.com/*"

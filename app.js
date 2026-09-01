@@ -1890,6 +1890,13 @@ function courseActivitySimilarity(previousActivities, currentActivities) {
   return Math.max(tokenScore, activityScore);
 }
 
+function normalizePublishedPlanForComparison(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, ' ')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 function getCurrentCourseActivitiesForHistory() {
   return [...document.querySelectorAll('.activity-row .rich-editor')]
     .map(editor => htmlVersTexteClassroom(editor.innerHTML).trim())
@@ -1949,15 +1956,14 @@ async function syncClassroomGroupBaseline(group, courseId) {
     }
     const number = Number.parseInt(String(latestPlan.text).match(/^\s*Cours\s*#\s*(\d+)/i)?.[1] || '', 10);
     if (!Number.isInteger(number) || number < 1) return { verified: true, baseline: local };
-    if (!local || number !== Number(local.lastPublishedNumber || 0)) {
-      history[String(group)] = {
-        lastPublishedNumber: number,
-        activities: extractActivitiesFromPublishedPlan(latestPlan.text),
-        courseId: String(courseId),
-        publishedAt: latestPlan.updateTime || latestPlan.creationTime || new Date().toISOString()
-      };
-      writeClassroomGroupHistory(history);
-    }
+    history[String(group)] = {
+      lastPublishedNumber: number,
+      activities: extractActivitiesFromPublishedPlan(latestPlan.text),
+      contentFingerprint: normalizePublishedPlanForComparison(latestPlan.text),
+      courseId: String(courseId),
+      publishedAt: latestPlan.updateTime || latestPlan.creationTime || new Date().toISOString()
+    };
+    writeClassroomGroupHistory(history);
     return { verified: true, baseline: history[String(group)] };
   } catch (error) {
     console.warn(`Dernier numéro Classroom indisponible pour le groupe ${group}`, error);
@@ -1996,6 +2002,7 @@ function rememberPublishedCourseForGroup(publication) {
   history[String(publication.group)] = {
     lastPublishedNumber: Number(publication.number),
     activities: publication.activities.slice(),
+    contentFingerprint: String(publication.contentFingerprint || ''),
     courseId: String(publication.courseId || ''),
     publishedAt: new Date().toISOString()
   };
@@ -2086,11 +2093,6 @@ async function publishPlanToGroup(group) {
       throw new Error(`Impossible de vérifier le dernier numéro publié dans le groupe ${group}.`);
     }
     const numbering = chooseCourseNumberForGroup(group, activities);
-    if (baseline.baseline && numbering.similarity !== null && !numbering.changed) {
-      showToast(`Ce cours est déjà publié dans le groupe ${group}.`, 'ok', 4000);
-      finishQuickClassroomPublication();
-      return;
-    }
     activeEmojiGroup = String(group);
     latestGeneratedText = '';
     latestGeneratedHtml = '';
@@ -2098,6 +2100,12 @@ async function publishPlanToGroup(group) {
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     if (!latestGeneratedText || !latestGeneratedHtml) {
       throw new Error('Le plan courant n’a pas pu être généré.');
+    }
+    const contentFingerprint = normalizePublishedPlanForComparison(latestGeneratedText);
+    if (baseline.baseline?.contentFingerprint && baseline.baseline.contentFingerprint === contentFingerprint) {
+      showToast(`Ce plan exact est déjà publié dans le groupe ${group}.`, 'ok', 4000);
+      finishQuickClassroomPublication();
+      return;
     }
 
     const select = document.getElementById('classroom-course-select');
@@ -2109,7 +2117,8 @@ async function publishPlanToGroup(group) {
       group: String(group),
       courseId: String(course.id),
       number: numbering.number,
-      activities
+      activities,
+      contentFingerprint
     };
     document.dispatchEvent(new CustomEvent('pdc:publish-course', {
       detail: {

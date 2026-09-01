@@ -1,6 +1,7 @@
 const JOB_KEY = 'pdcNativeClassroomJob';
 const LAST_RESULT_KEY = 'pdcNativeClassroomLastResult';
-const MAX_AGE_MS = 5 * 60 * 1000;
+const MAX_IDLE_MS = 90 * 1000;
+const WATCHDOG_ALARM = 'pdcNativeClassroomWatchdog';
 const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
 
 function validGeneratorSender(sender) {
@@ -18,7 +19,9 @@ async function readJob() {
 }
 
 async function writeJob(job) {
+  job.updatedAt = Date.now();
   await chrome.storage.local.set({ [JOB_KEY]: job });
+  await chrome.alarms.create(WATCHDOG_ALARM, { when: job.updatedAt + MAX_IDLE_MS });
 }
 
 async function finishJob(job, outcome, error = '') {
@@ -30,13 +33,44 @@ async function finishJob(job, outcome, error = '') {
     error,
     finishedAt: Date.now()
   };
-  await chrome.storage.local.set({ [LAST_RESULT_KEY]: result });
-  await chrome.tabs.sendMessage(job.sourceTabId, result).catch(() => {});
-  await chrome.storage.local.remove(JOB_KEY);
-  await chrome.tabs.update(job.sourceTabId, { active: true }).catch(() => {});
-  if (job.classroomTabId && job.classroomTabId !== job.sourceTabId) {
-    await chrome.tabs.remove(job.classroomTabId).catch(() => {});
+  try {
+    await chrome.storage.local.set({ [LAST_RESULT_KEY]: result });
+    await chrome.tabs.sendMessage(job.sourceTabId, result).catch(() => {});
+  } finally {
+    await chrome.storage.local.remove(JOB_KEY).catch(() => {});
+    await chrome.alarms.clear(WATCHDOG_ALARM).catch(() => {});
+    await chrome.tabs.update(job.sourceTabId, { active: true }).catch(() => {});
+    if (job.classroomTabId && job.classroomTabId !== job.sourceTabId) {
+      await chrome.tabs.remove(job.classroomTabId).catch(() => {});
+    }
   }
+}
+
+async function tabExists(tabId) {
+  if (!Number.isInteger(Number(tabId))) return false;
+  return Boolean(await chrome.tabs.get(Number(tabId)).catch(() => null));
+}
+
+async function clearAbandonedJob(existing = null) {
+  const job = existing || await readJob();
+  if (!job) return false;
+  const updatedAt = Number(job.updatedAt || job.createdAt || 0);
+  const expired = !updatedAt || Date.now() - updatedAt >= MAX_IDLE_MS;
+  const sourceExists = await tabExists(job.sourceTabId);
+  const classroomExists = !job.classroomTabId || await tabExists(job.classroomTabId);
+  if (!expired && sourceExists && classroomExists) return false;
+  await finishJob(job, 'failed', expired
+    ? 'La publication précédente a expiré et a été réinitialisée.'
+    : 'La publication précédente a été interrompue par la fermeture d’un onglet.');
+  return true;
+}
+
+async function jobStillRunning(job) {
+  if (!job?.classroomTabId) return job?.status === 'opening' && Date.now() - Number(job.updatedAt || job.createdAt || 0) < 30000;
+  const status = await chrome.tabs.sendMessage(job.classroomTabId, {
+    type: 'PDC_NATIVE_STATUS', requestId: job.requestId
+  }).catch(() => null);
+  return Boolean(status?.running && String(status.requestId || '') === String(job.requestId || ''));
 }
 
 async function withDebugger(tabId, action) {
@@ -84,9 +118,12 @@ async function handleMessage(message, sender) {
     const target = new URL(payload.alternateLink || '');
     if (target.origin !== 'https://classroom.google.com' || !/\/c\//.test(target.pathname)) throw new Error('destination Classroom invalide');
     if (!String(payload.text || '').trim() || !String(payload.title || '').trim()) throw new Error('plan vide');
-    const existing = await readJob();
-    if (existing && Date.now() - Number(existing.createdAt || 0) < MAX_AGE_MS && ['opening', 'claimed', 'pasting', 'publishing'].includes(existing.status)) {
-      throw new Error('une publication Classroom est déjà en cours');
+    let existing = await readJob();
+    if (existing && await clearAbandonedJob(existing)) existing = null;
+    if (existing && ['opening', 'claimed', 'pasting', 'publishing'].includes(existing.status)) {
+      if (await jobStillRunning(existing)) throw new Error('une publication Classroom est déjà en cours');
+      await finishJob(existing, 'failed', 'La publication précédente ne répondait plus et a été réinitialisée.');
+      existing = null;
     }
     const job = {
       requestId: String(payload.requestId || ''),
@@ -118,7 +155,7 @@ async function handleMessage(message, sender) {
 
   if (!validClassroomSender(sender)) throw new Error('origine Classroom refusée');
   const job = await readJob();
-  if (!job || Date.now() - Number(job.createdAt || 0) >= MAX_AGE_MS) return { ok: false, error: 'aucune publication active' };
+  if (!job || await clearAbandonedJob(job)) return { ok: false, error: 'aucune publication active' };
 
   if (message.type === 'claim') {
     if (job.classroomTabId && job.classroomTabId !== sender.tab.id) return { ok: false, error: 'publication déjà attribuée à un autre onglet' };
@@ -162,3 +199,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handleMessage(message, sender).then(sendResponse).catch(error => sendResponse({ ok: false, error: String(error?.message || error) }));
   return true;
 });
+
+chrome.runtime.onInstalled.addListener(() => {
+  readJob().then(job => job && finishJob(job, 'failed', 'Le pont Classroom a été mis à jour et réinitialisé.')).catch(console.error);
+});
+
+chrome.alarms.onAlarm.addListener(alarm => {
+  if (alarm.name === WATCHDOG_ALARM) clearAbandonedJob().catch(console.error);
+});
+
+chrome.tabs.onRemoved.addListener(tabId => {
+  readJob().then(job => {
+    if (job && [job.sourceTabId, job.classroomTabId].includes(tabId)) {
+      return finishJob(job, 'failed', 'La publication a été interrompue par la fermeture d’un onglet.');
+    }
+  }).catch(console.error);
+});
+
+clearAbandonedJob().catch(console.error);

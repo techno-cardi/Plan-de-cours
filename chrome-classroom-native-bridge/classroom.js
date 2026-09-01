@@ -1,8 +1,10 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.8';
+  const VERSION = '1.0.9';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let activeRequestId = '';
+  let activePhase = 'idle';
   const fold = value => String(value || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -62,13 +64,6 @@
     return candidates.find(button => button.getClientRects().length && !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
   }
 
-  function duplicateVisible(job) {
-    const body = fold(document.body?.innerText || '');
-    const titleKey = fold(job.title.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, ''));
-    const contentProbes = (job.probes || []).slice(1, 4).map(fold).filter(value => value.length >= 12);
-    return titleKey.length >= 8 && body.includes(titleKey) && contentProbes.length >= 2 && contentProbes.every(probe => body.includes(probe));
-  }
-
   function hasStyledText(root, text, kind) {
     const wanted = fold(text);
     return Array.from(root.querySelectorAll('*')).some(node => {
@@ -89,11 +84,23 @@
     return result;
   }
 
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== 'PDC_NATIVE_STATUS') return;
+    sendResponse({
+      ok: true,
+      requestId: activeRequestId,
+      phase: activePhase,
+      running: Boolean(activeRequestId && !['idle', 'finished'].includes(activePhase))
+    });
+  });
+
   async function run() {
     document.documentElement.dataset.pdcNativeClassroomBridgeVersion = VERSION;
     const claimed = await chrome.runtime.sendMessage({ type: 'claim' });
     if (!claimed?.ok || !claimed.job) return;
     const job = claimed.job;
+    activeRequestId = String(job.requestId || '');
+    activePhase = 'claimed';
     try {
       if (courseToken(location.pathname) !== String(job.courseId)) {
         const target = new URL(job.alternateLink);
@@ -102,12 +109,6 @@
         return;
       }
       await waitFor(() => document.body?.innerText?.includes(job.courseName || `Groupe ${job.group}`), 12000);
-      if (duplicateVisible(job)) {
-        showBanner('Ce plan est déjà visible dans ce groupe; aucune nouvelle annonce n’a été créée.', 'ok');
-        await send({ type: 'complete', outcome: 'duplicate' });
-        return;
-      }
-
       let newButton = await waitFor(newAnnouncementButton, 30000, 200);
       if (!newButton) {
         await send({ type: 'activate' });
@@ -122,6 +123,7 @@
       editor.focus();
       editor.click();
       showBanner(`Collage riche natif en cours dans ${job.courseName || `Groupe ${job.group}`}…`);
+      activePhase = 'pasting';
       await send({ type: 'paste' });
 
       const pasted = await waitFor(() => {
@@ -139,18 +141,41 @@
           .find(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
       }, 7000);
       if (!publish) throw new Error('bouton Publier natif inactif');
+      activePhase = 'publishing';
       await sleep(500);
-      const rect = publish.getBoundingClientRect();
-      await send({ type: 'publish', x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      publish.focus();
+      publish.click();
+      await sleep(1500);
+      if (document.body.contains(editor)) {
+        const refreshed = visibleButtons('Publier', dialog || document)
+          .find(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
+        if (refreshed) {
+          refreshed.scrollIntoView({ block: 'center', inline: 'nearest' });
+          const rect = refreshed.getBoundingClientRect();
+          await send({ type: 'publish', x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+        }
+      }
+      await sleep(2000);
+      if (document.body.contains(editor)) {
+        const retry = visibleButtons('Publier', dialog || document)
+          .find(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
+        if (retry) {
+          const rect = retry.getBoundingClientRect();
+          await send({ type: 'publish', x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+        }
+      }
 
+      activePhase = 'verifying';
       const visible = await waitFor(() => !document.body.contains(editor) && fold(document.body.innerText).includes(fold(job.title)), 30000, 250);
       if (!visible) throw new Error('publication non retrouvée dans le flux visible');
       showBanner(`Plan riche publié et vérifié dans ${job.courseName || `Groupe ${job.group}`}.`, 'ok');
       await send({ type: 'complete', outcome: 'published' });
+      activePhase = 'finished';
     } catch (error) {
       console.error('[Plan de cours — pont natif Classroom]', error);
       showBanner(`${error?.message || error}. Aucun autre éditeur ne sera ouvert automatiquement.`, 'error');
       await chrome.runtime.sendMessage({ type: 'fail', error: String(error?.message || error) }).catch(() => {});
+      activePhase = 'finished';
     }
   }
 
