@@ -63,10 +63,14 @@ assert.match(app, /MutationObserver\(readNativeClassroomResult\)/);
 assert.match(app, /data-pdc-native-publish-result/);
 assert.match(app, /baseline\.baseline\?\.contentFingerprint && baseline\.baseline\.contentFingerprint === contentFingerprint/);
 assert.doesNotMatch(app, /baseline\.baseline && numbering\.similarity !== null && !numbering\.changed/);
-assert.match(app, /courseNumberManuallyEdited && enteredIsValid/);
+assert.match(app, /explicitNumber = !!options\.explicitNumber && enteredIsValid/);
 assert.match(app, /'manual-correction'/);
 assert.match(app, /'loaded-correction'/);
 assert.match(app, /btn\.textContent = `Groupe \$\{group\}`/);
+const disconnectStart = app.indexOf('async function googleDisconnect');
+const disconnectEnd = app.indexOf('async function afterGoogleLogin', disconnectStart);
+const disconnectSource = disconnectStart >= 0 && disconnectEnd > disconnectStart ? app.slice(disconnectStart, disconnectEnd) : '';
+assert.match(disconnectSource, /updateQuickClassroomButtons\(\)/, 'La déconnexion doit désactiver immédiatement les boutons Classroom');
 assert.match(app, /function specialSectionLabel/);
 assert.match(app, /specialSectionLabel\('Devoir'/);
 assert.match(app, /specialSectionLabel\('Rappel'/);
@@ -211,10 +215,15 @@ assert.match(app, /querySelectorAll\('li > li'\)/);
 assert.match(app, /event\.shiftKey \? 'outdent' : 'indent'/);
 assert.match(app, /primaryItems \|\| richToStructuredLines/);
 assert.match(app, /durableIndent = '&nbsp;'\.repeat\(depth \* 4\)/);
-assert.match(index, /v1\.0\.25/);
+assert.match(index, /app\.js\?v=1\.0\.29/);
+assert.match(index, /changelog-version-badge">v1\.0\.29/);
+assert.match(index, /id="btn-course-group-31"/);
+assert.match(index, /id="btn-course-group-32"/);
+assert.match(index, /id="btn-course-group-51"/);
+assert.match(index, /id="course-group-number-status"/);
 
-const numberingStart = app.indexOf('function chooseCourseNumberForGroup');
-const numberingEnd = app.indexOf('function rememberPublishedCourseForGroup', numberingStart);
+const numberingStart = app.indexOf('function calculateCourseNumberForGroup');
+const numberingEnd = app.indexOf('function setCourseGroupNumberStatus', numberingStart);
 const numberingSource = numberingStart >= 0 && numberingEnd > numberingStart ? app.slice(numberingStart, numberingEnd).trim() : '';
 assert.ok(numberingSource, 'Décision intelligente de numérotation absente');
 function runNumbering({ manual, loaded, entered }) {
@@ -233,9 +242,49 @@ function runNumbering({ manual, loaded, entered }) {
   vm.runInContext(`${numberingSource}; this.choose = chooseCourseNumberForGroup;`, context);
   return context.choose('31', ['Activité complètement corrigée']);
 }
-assert.deepEqual({ ...runNumbering({ manual: false, loaded: false, entered: 2 }) }, { number: 3, changed: true, similarity: 0.1, intent: 'new-course' });
-assert.deepEqual({ ...runNumbering({ manual: true, loaded: false, entered: 2 }) }, { number: 2, changed: false, similarity: 0.1, intent: 'manual-correction' });
-assert.deepEqual({ ...runNumbering({ manual: false, loaded: true, entered: 2 }) }, { number: 2, changed: false, similarity: 0.1, intent: 'loaded-correction' });
+assert.deepEqual({ ...runNumbering({ manual: false, loaded: false, entered: 2 }) }, { number: 3, changed: true, similarity: 0.1, intent: 'new-course', previousNumber: 2 });
+assert.deepEqual({ ...runNumbering({ manual: true, loaded: false, entered: 2 }) }, { number: 2, changed: false, similarity: 0.1, intent: 'manual-correction', previousNumber: 2 });
+assert.deepEqual({ ...runNumbering({ manual: false, loaded: true, entered: 2 }) }, { number: 2, changed: false, similarity: 0.1, intent: 'loaded-correction', previousNumber: 2 });
+assert.deepEqual({ ...(() => {
+  const input = { value: '2' };
+  const context = {
+    courseNumberManuallyEdited: false,
+    currentLoadedCourseId: '',
+    savedCourses: [],
+    readClassroomGroupHistory: () => ({ '31': { lastPublishedNumber: 2, activities: ['Ancienne activité'] } }),
+    courseActivitySimilarity: () => 0,
+    document: { getElementById: id => id === 'num-cours' ? input : { checked: true } },
+    toggleSansNumero() {}, saveNumCours() {}, sauvegarderPlanLocal() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(`${numberingSource}; this.choose = chooseCourseNumberForGroup;`, context);
+  return context.choose('31', []);
+})() }, { number: 3, changed: true, similarity: 0, intent: 'new-course', previousNumber: 2 });
+
+const baselineStart = app.indexOf('async function syncClassroomGroupBaseline');
+const baselineEnd = app.indexOf('function calculateCourseNumberForGroup', baselineStart);
+const baselineSource = baselineStart >= 0 && baselineEnd > baselineStart ? app.slice(baselineStart, baselineEnd).trim() : '';
+assert.ok(baselineSource, 'Synchronisation Classroom par groupe absente');
+let writtenHistory = null;
+const baselineContext = {
+  readClassroomGroupHistory: () => ({}),
+  writeClassroomGroupHistory: value => { writtenHistory = value; },
+  extractActivitiesFromPublishedPlan: () => ['activité'],
+  normalizePublishedPlanForComparison: value => value,
+  console,
+  apiFetch: async url => url.includes('pageToken=page-2')
+    ? { announcements: [{ text: 'Cours #3 (3 septembre 2026)', creationTime: '2026-09-03T12:00:00Z', updateTime: '2026-09-03T12:00:00Z' }] }
+    : {
+        announcements: [{ text: 'Cours #1 (1er septembre 2026)', creationTime: '2026-09-04T12:00:00Z', updateTime: '2026-09-04T12:00:00Z' }],
+        nextPageToken: 'page-2'
+      }
+};
+vm.createContext(baselineContext);
+vm.runInContext(`${baselineSource}; this.syncBaseline = syncClassroomGroupBaseline;`, baselineContext);
+const syncedBaseline = await baselineContext.syncBaseline('31', 'course-31');
+assert.equal(syncedBaseline.verified, true);
+assert.equal(syncedBaseline.baseline.lastPublishedNumber, 3, 'Modifier un ancien cours ne doit pas faire reculer le numéro');
+assert.equal(writtenHistory['31'].courseId, 'course-31');
 
 const extractStart = app.indexOf('function extractActivitiesFromPublishedPlan');
 const extractEnd = app.indexOf('async function syncClassroomGroupBaseline', extractStart);
@@ -282,8 +331,8 @@ dateContext.restoreDate({ dateISO: '2026-08-29T12:00:00.000Z', dateDisplay: '28 
 assert.equal(dateInput.value, expectedToday);
 dateContext.restoreDate({ dateDisplay: '7 septembre 2026' });
 assert.equal(dateInput.value, expectedToday);
-assert.match(index, /app\.js\?v=1\.0\.28/);
-assert.match(index, /v1\.0\.28/);
+assert.match(index, /app\.js\?v=1\.0\.29/);
+assert.match(index, /v1\.0\.29/);
 assert.match(index, /onclick="refreshCoursePreview\(\)"/);
 assert.match(app, /async function refreshCoursePreview\(\)/);
 assert.match(app, /await generer\(\)/);

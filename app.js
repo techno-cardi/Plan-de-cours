@@ -62,6 +62,8 @@ const LOCAL_PLAN_KEY = 'cardinal_plan_form_state_v2';
 const LOCAL_PLAN_BACKUP_KEY = 'cardinal_plan_form_state_backup_v1';
 const CLASSROOM_GROUP_HISTORY_KEY = 'cardinal_classroom_group_history_v1';
 const CLASSROOM_GROUP_HISTORY_BACKUP_KEY = 'cardinal_classroom_group_history_backup_v1';
+const SELECTED_CLASSROOM_GROUP_KEY = 'cardinal_selected_classroom_group_v1';
+const QUICK_CLASSROOM_GROUPS = ['31', '32', '51'];
 const RECENT_EMOJI_SETS_KEY = 'cardinal_recent_emoji_sets_v1';
 const KEEP_FORM_PREF_KEY = 'cardinal_keep_form_filled_v1';
 const PRIVILEGED_EMOJI_EMAIL = 'tremblay.kevin@cscapitale.qc.ca';
@@ -83,6 +85,12 @@ let suppressCourseAutoSave = false;
 let currentLoadedCourseId = '';
 let currentLoadedSupplyId = '';
 let courseNumberManuallyEdited = false;
+let selectedClassroomGroup = QUICK_CLASSROOM_GROUPS.includes(localStorage.getItem(SELECTED_CLASSROOM_GROUP_KEY))
+  ? localStorage.getItem(SELECTED_CLASSROOM_GROUP_KEY)
+  : '';
+let classroomGroupBaselineState = {};
+let classroomGroupSelectionRequest = 0;
+let groupNumberSuggestionTimer = null;
 let hasUnsavedPlan = false;
 let _sheetMetaCache = null;
 let _sheetMetaCacheTime = 0;
@@ -1111,6 +1119,7 @@ async function googleDisconnect() {
   googleTokenExpiry = 0;
   googleUser = null;
   classroomCourses = [];
+  classroomGroupBaselineState = {};
   bankActivities = [];
   savedCourses = [];
   savedSupplyPlans = [];
@@ -1128,6 +1137,7 @@ async function googleDisconnect() {
   setStatus('bank-status', '', '');
   setStatus('classroom-status', '', '');
   showToast('Déconnecté de Google', 'info');
+  updateQuickClassroomButtons();
   updateRoleBasedUi();
   applySupplyDefaultsForCurrentUser(true);
 }
@@ -1351,6 +1361,7 @@ function fillFormFromCourseState(state) {
   toggleRappel();
   sauvegarderPlanLocal();
   syncSupplyFromCourse(true);
+  scheduleSelectedGroupNumberSuggestion();
 }
 
 function parseSortTimestamp(value) {
@@ -1868,7 +1879,6 @@ async function saveActivitiesToBank(entries) {
   await Promise.all(promises);
   await refreshBank();
 }
-const QUICK_CLASSROOM_GROUPS = ['31', '32', '51'];
 let quickClassroomPublishInProgress = false;
 let pendingQuickClassroomPublication = null;
 let quickClassroomResultTimer = null;
@@ -1949,8 +1959,36 @@ async function syncClassroomGroupBaseline(group, courseId) {
   const history = readClassroomGroupHistory();
   const local = history[String(group)] || null;
   try {
-    const data = await apiFetch(`https://classroom.googleapis.com/v1/courses/${encodeURIComponent(courseId)}/announcements?orderBy=updateTime%20desc&pageSize=100`);
-    const latestPlan = (data.announcements || []).find(announcement => /^\s*Cours\s*#\s*\d+/i.test(String(announcement.text || '')));
+    const announcements = [];
+    const seenPageTokens = new Set();
+    let pageToken = '';
+    do {
+      const tokenParam = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
+      const data = await apiFetch(`https://classroom.googleapis.com/v1/courses/${encodeURIComponent(courseId)}/announcements?orderBy=updateTime%20desc&pageSize=100${tokenParam}`);
+      announcements.push(...(data.announcements || []));
+      const nextPageToken = String(data.nextPageToken || '');
+      if (!nextPageToken || seenPageTokens.has(nextPageToken)) break;
+      seenPageTokens.add(nextPageToken);
+      pageToken = nextPageToken;
+    } while (pageToken);
+
+    const latestPlan = announcements
+      .map((announcement, sourceIndex) => {
+        const text = String(announcement.text || '');
+        const number = Number.parseInt(text.match(/^\s*Cours\s*#\s*(\d+)/i)?.[1] || '', 10);
+        return {
+          announcement,
+          number,
+          sourceIndex,
+          creationTime: Date.parse(announcement.creationTime || '') || 0,
+          updateTime: Date.parse(announcement.updateTime || '') || 0
+        };
+      })
+      .filter(entry => Number.isInteger(entry.number) && entry.number > 0)
+      // Le plus grand numéro réellement publié est la borne du compteur.
+      // Republier ou modifier un ancien cours ne peut donc jamais le faire reculer.
+      .sort((a, b) => b.number - a.number || b.creationTime - a.creationTime || b.updateTime - a.updateTime || a.sourceIndex - b.sourceIndex)[0];
+
     if (!latestPlan) {
       // Une ancienne valeur locale ne suffit pas à prouver qu'un cours a été
       // publié. Un groupe sans annonce réelle repart donc proprement à #1.
@@ -1960,14 +1998,13 @@ async function syncClassroomGroupBaseline(group, courseId) {
       }
       return { verified: true, baseline: null };
     }
-    const number = Number.parseInt(String(latestPlan.text).match(/^\s*Cours\s*#\s*(\d+)/i)?.[1] || '', 10);
-    if (!Number.isInteger(number) || number < 1) return { verified: true, baseline: local };
+    const announcement = latestPlan.announcement;
     history[String(group)] = {
-      lastPublishedNumber: number,
-      activities: extractActivitiesFromPublishedPlan(latestPlan.text),
-      contentFingerprint: normalizePublishedPlanForComparison(latestPlan.text),
+      lastPublishedNumber: latestPlan.number,
+      activities: extractActivitiesFromPublishedPlan(announcement.text),
+      contentFingerprint: normalizePublishedPlanForComparison(announcement.text),
       courseId: String(courseId),
-      publishedAt: latestPlan.updateTime || latestPlan.creationTime || new Date().toISOString()
+      publishedAt: announcement.creationTime || announcement.updateTime || new Date().toISOString()
     };
     writeClassroomGroupHistory(history);
     return { verified: true, baseline: history[String(group)] };
@@ -1977,29 +2014,30 @@ async function syncClassroomGroupBaseline(group, courseId) {
   }
 }
 
-function chooseCourseNumberForGroup(group, activities) {
+function calculateCourseNumberForGroup(group, activities, options = {}) {
   const history = readClassroomGroupHistory();
   const previous = history[String(group)] || null;
-  const input = document.getElementById('num-cours');
-  const entered = Number.parseInt(input?.value || '', 10);
+  const entered = Number.parseInt(options.entered || '', 10);
   let number = Number.isInteger(entered) && entered > 0 ? entered : 1;
   let changed = false;
   let similarity = null;
   let intent = 'automatic';
+  let previousNumber = null;
   const enteredIsValid = Number.isInteger(entered) && entered > 0;
   const loadedCourse = currentLoadedCourseId
     ? savedCourses.find(course => course.id === currentLoadedCourseId) || null
     : null;
-  const explicitNumber = courseNumberManuallyEdited && enteredIsValid;
+  const explicitNumber = !!options.explicitNumber && enteredIsValid;
   if (!previous) {
     // La numérotation rapide est indépendante du dernier numéro d'un autre
     // groupe et commence toujours par le premier cours réel.
     number = explicitNumber ? entered : 1;
     intent = explicitNumber ? 'manual' : 'first-course';
   } else if (Number.isInteger(Number(previous.lastPublishedNumber)) && Number(previous.lastPublishedNumber) > 0) {
-    const previousNumber = Number(previous.lastPublishedNumber);
+    previousNumber = Number(previous.lastPublishedNumber);
     similarity = courseActivitySimilarity(previous.activities, activities);
-    changed = activities.length > 0 && Array.isArray(previous.activities) && previous.activities.length > 0 && similarity < 0.7;
+    const comparable = activities.length > 0 && Array.isArray(previous.activities) && previous.activities.length > 0;
+    changed = !comparable || similarity < 0.7;
     const loadedCorrection = loadedCourse && Number(loadedCourse.courseNumber) === previousNumber && entered === previousNumber;
     if (explicitNumber) {
       number = entered;
@@ -2014,13 +2052,161 @@ function chooseCourseNumberForGroup(group, activities) {
       intent = changed ? 'new-course' : 'automatic-correction';
     }
   }
+  return { number, changed, similarity, intent, previousNumber };
+}
+
+function chooseCourseNumberForGroup(group, activities) {
+  const input = document.getElementById('num-cours');
+  const decision = calculateCourseNumberForGroup(group, activities, {
+    entered: input?.value || '',
+    explicitNumber: courseNumberManuallyEdited
+  });
+  const { number } = decision;
   if (input) input.value = String(number);
   const withoutNumber = document.getElementById('sans-numero');
   if (withoutNumber) withoutNumber.checked = false;
   toggleSansNumero();
   saveNumCours(number);
   sauvegarderPlanLocal();
-  return { number, changed, similarity, intent };
+  return decision;
+}
+
+function setCourseGroupNumberStatus(text, state = '') {
+  const status = document.getElementById('course-group-number-status');
+  if (!status) return;
+  status.textContent = text || '';
+  status.dataset.state = state;
+  status.hidden = !text;
+}
+
+function updateCourseGroupNumberBadges() {
+  const history = readClassroomGroupHistory();
+  QUICK_CLASSROOM_GROUPS.forEach(group => {
+    const badge = document.getElementById(`course-group-number-${group}`);
+    if (!badge) return;
+    const state = classroomGroupBaselineState[group];
+    const baseline = history[group] || null;
+    if (state?.status === 'loading') badge.textContent = 'Vérification…';
+    else if (baseline?.lastPublishedNumber) badge.textContent = `Dernier #${baseline.lastPublishedNumber}`;
+    else if (state?.status === 'verified') badge.textContent = 'Aucun cours';
+    else badge.textContent = 'Choisir';
+  });
+}
+
+function updateCourseGroupSelectorUi() {
+  QUICK_CLASSROOM_GROUPS.forEach(group => {
+    const selected = selectedClassroomGroup === group;
+    const selector = document.getElementById(`btn-course-group-${group}`);
+    if (selector) {
+      selector.classList.toggle('active', selected);
+      selector.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    }
+    document.getElementById(`btn-publish-group-${group}`)?.classList.toggle('selected-group', selected);
+  });
+  updateCourseGroupNumberBadges();
+}
+
+function describeCourseNumberDecision(group, decision) {
+  if (decision.intent === 'manual' || decision.intent === 'manual-correction') {
+    return `Groupe ${group} · numéro manuel #${decision.number}`;
+  }
+  if (decision.intent === 'first-course') return `Groupe ${group} · premier cours : #1`;
+  if (decision.intent === 'loaded-correction') return `Groupe ${group} · cours repris : #${decision.number}`;
+  if (decision.intent === 'automatic-correction') return `Groupe ${group} · contenu semblable : #${decision.number}`;
+  return `Groupe ${group} · dernier #${decision.previousNumber} · prochain #${decision.number}`;
+}
+
+function applySelectedGroupNumberSuggestion() {
+  const group = selectedClassroomGroup;
+  if (!group) {
+    setCourseGroupNumberStatus('', '');
+    return null;
+  }
+  const state = classroomGroupBaselineState[group];
+  const cachedBaseline = readClassroomGroupHistory()[group] || null;
+  if (state?.status === 'loading') {
+    setCourseGroupNumberStatus(`Groupe ${group} · vérification Classroom…`, 'loading');
+    return null;
+  }
+  if (!cachedBaseline && state?.status !== 'verified') {
+    const message = state?.status === 'missing-course'
+      ? `Groupe ${group} · cours Classroom introuvable`
+      : state?.status === 'error'
+        ? `Groupe ${group} · vérification Classroom impossible`
+        : `Groupe ${group} · connexion Google requise`;
+    setCourseGroupNumberStatus(message, state?.status === 'error' ? 'error' : '');
+    return null;
+  }
+  const decision = chooseCourseNumberForGroup(group, getCurrentCourseActivitiesForHistory());
+  setCourseGroupNumberStatus(describeCourseNumberDecision(group, decision), decision.intent === 'manual' ? 'manual' : 'ok');
+  updateCourseGroupSelectorUi();
+  return decision;
+}
+
+function scheduleSelectedGroupNumberSuggestion() {
+  clearTimeout(groupNumberSuggestionTimer);
+  if (!selectedClassroomGroup || courseNumberManuallyEdited) return;
+  groupNumberSuggestionTimer = setTimeout(() => applySelectedGroupNumberSuggestion(), 500);
+}
+
+function showSelectedGroupManualNumber() {
+  if (!selectedClassroomGroup) return;
+  const input = document.getElementById('num-cours');
+  const entered = Number.parseInt(input?.value || '', 10);
+  if (!Number.isInteger(entered) || entered < 1) {
+    setCourseGroupNumberStatus(`Groupe ${selectedClassroomGroup} · entrez un numéro valide`, 'error');
+    return;
+  }
+  setCourseGroupNumberStatus(`Groupe ${selectedClassroomGroup} · numéro manuel #${entered}`, 'manual');
+}
+
+async function refreshClassroomGroupBaseline(group) {
+  const normalizedGroup = String(group || '');
+  const course = getClassroomCourseForGroup(normalizedGroup);
+  if (!googleAccessToken) {
+    classroomGroupBaselineState[normalizedGroup] = { status: 'signed-out' };
+    updateCourseGroupSelectorUi();
+    return { verified: false, baseline: readClassroomGroupHistory()[normalizedGroup] || null };
+  }
+  if (!course) {
+    classroomGroupBaselineState[normalizedGroup] = { status: 'missing-course' };
+    updateCourseGroupSelectorUi();
+    return { verified: false, baseline: null };
+  }
+  classroomGroupBaselineState[normalizedGroup] = { status: 'loading' };
+  updateCourseGroupSelectorUi();
+  const result = await syncClassroomGroupBaseline(normalizedGroup, String(course.id));
+  classroomGroupBaselineState[normalizedGroup] = {
+    status: result.verified ? 'verified' : 'error',
+    baseline: result.baseline || null
+  };
+  updateCourseGroupSelectorUi();
+  return result;
+}
+
+async function selectCourseGroup(group, options = {}) {
+  const normalizedGroup = String(group || '');
+  if (!QUICK_CLASSROOM_GROUPS.includes(normalizedGroup)) return null;
+  const request = ++classroomGroupSelectionRequest;
+  selectedClassroomGroup = normalizedGroup;
+  localStorage.setItem(SELECTED_CLASSROOM_GROUP_KEY, normalizedGroup);
+  if (options.resetManual !== false) courseNumberManuallyEdited = false;
+  const course = getClassroomCourseForGroup(normalizedGroup);
+  const select = document.getElementById('classroom-course-select');
+  if (select && course) select.value = String(course.id);
+  updateCourseGroupSelectorUi();
+  sauvegarderPlanLocal();
+
+  if (options.refresh === false) return applySelectedGroupNumberSuggestion();
+  setCourseGroupNumberStatus(`Groupe ${normalizedGroup} · vérification Classroom…`, 'loading');
+  await refreshClassroomGroupBaseline(normalizedGroup);
+  if (request !== classroomGroupSelectionRequest || selectedClassroomGroup !== normalizedGroup) return null;
+  return applySelectedGroupNumberSuggestion();
+}
+
+async function refreshClassroomGroupBaselines() {
+  await Promise.all(QUICK_CLASSROOM_GROUPS.map(group => refreshClassroomGroupBaseline(group)));
+  if (selectedClassroomGroup) applySelectedGroupNumberSuggestion();
 }
 
 function rememberPublishedCourseForGroup(publication) {
@@ -2033,6 +2219,11 @@ function rememberPublishedCourseForGroup(publication) {
     publishedAt: new Date().toISOString()
   };
   writeClassroomGroupHistory(history);
+  classroomGroupBaselineState[String(publication.group)] = {
+    status: 'verified',
+    baseline: history[String(publication.group)]
+  };
+  updateCourseGroupSelectorUi();
 }
 
 function finishQuickClassroomPublication() {
@@ -2080,9 +2271,11 @@ function updateQuickClassroomButtons() {
       ? `Publier dans ${course.name}${course.section ? ' - ' + course.section : ''}`
       : `Aucun cours Classroom actif correspondant au groupe ${group}`;
   });
+  updateCourseGroupSelectorUi();
 }
 
 async function publishPlanToGroup(group) {
+  await selectCourseGroup(group, { resetManual: false, refresh: false });
   const course = getClassroomCourseForGroup(group);
   const btn = document.getElementById(`btn-publish-group-${group}`);
 
@@ -2118,7 +2311,9 @@ async function publishPlanToGroup(group) {
     if (!baseline.verified) {
       throw new Error(`Impossible de vérifier le dernier numéro publié dans le groupe ${group}.`);
     }
+    classroomGroupBaselineState[String(group)] = { status: 'verified', baseline: baseline.baseline || null };
     const numbering = chooseCourseNumberForGroup(group, activities);
+    setCourseGroupNumberStatus(describeCourseNumberDecision(String(group), numbering), numbering.intent === 'manual' ? 'manual' : 'ok');
     activeEmojiGroup = String(group);
     latestGeneratedText = '';
     latestGeneratedHtml = '';
@@ -2222,6 +2417,7 @@ async function loadClassroomCourses() {
   select.innerHTML = '<option value="">Choisir un cours</option>' + classroomCourses.map(c => `<option value="${c.id}">${escapeHtml(c.name + (c.section ? ' - ' + c.section : ''))}</option>`).join('');
   setStatus('classroom-status', classroomCourses.length ? `${classroomCourses.length} cours actif(s) trouvés.` : 'Aucun cours actif trouvé.', classroomCourses.length ? 'ok' : '');
   updateQuickClassroomButtons();
+  await refreshClassroomGroupBaselines();
 }
 function htmlVersTexteClassroom(html) {
   const wrapper = document.createElement('div'); wrapper.innerHTML = html || '';
@@ -2335,7 +2531,7 @@ async function publishToClassroom() {
 
 function getPlanStateForLocal() {
   return {
-    version: 4,
+    version: 5,
     savedAt: new Date().toISOString(),
     activities: [...document.querySelectorAll('.activity-row .rich-editor')].map(ed => ed.innerHTML),
     devoirHtml: document.getElementById('devoir').innerHTML,
@@ -2345,6 +2541,8 @@ function getPlanStateForLocal() {
     dateDisplay: document.getElementById('date-cours')?.value?.trim() || '',
     dateISO: dpDate ? dpDate.toISOString() : '',
     courseNumber: document.getElementById('num-cours')?.value?.trim() || '',
+    selectedClassroomGroup,
+    courseNumberManuallyEdited,
     sansNumero: !!document.getElementById('sans-numero')?.checked,
     avecEmojis: !!document.getElementById('avec-emojis')?.checked,
     reuseCourseEnabled: !!document.getElementById('enable-reuse-course')?.checked,
@@ -2408,6 +2606,11 @@ function restaurerPlanLocal() {
     setCourseDateFromState(state);
 
     document.getElementById('num-cours').value = state.courseNumber || '';
+    if (QUICK_CLASSROOM_GROUPS.includes(String(state.selectedClassroomGroup || ''))) {
+      selectedClassroomGroup = String(state.selectedClassroomGroup);
+      localStorage.setItem(SELECTED_CLASSROOM_GROUP_KEY, selectedClassroomGroup);
+    }
+    courseNumberManuallyEdited = !!state.courseNumberManuallyEdited;
     document.getElementById('sans-numero').checked = !!state.sansNumero;
     document.getElementById('avec-emojis').checked = state.avecEmojis !== false;
     document.getElementById('enable-reuse-course').checked = !!state.reuseCourseEnabled;
@@ -2443,6 +2646,8 @@ function restaurerPlanLocal() {
     toggleReuseCourse();
     toggleDevoir();
     toggleRappel();
+    updateCourseGroupSelectorUi();
+    scheduleSelectedGroupNumberSuggestion();
     syncSupplyFromCourse(true);
     setPlanMode(state.currentPlanMode === 'supply' ? 'supply' : 'course');
   } catch (e) {
@@ -3120,6 +3325,7 @@ function reinitialiserConfirmed() {
   document.getElementById('btn-reset').style.display = 'none';
   syncSupplyFromCourse(true);
   effacerPlanLocal();
+  scheduleSelectedGroupNumberSuggestion();
 }
 
 
@@ -3149,6 +3355,8 @@ initSupplyRuleBank();
 applySupplyDefaultsForCurrentUser(true);
 syncSupplyFromCourse(true);
 updateRoleBasedUi();
+updateCourseGroupSelectorUi();
+applySelectedGroupNumberSuggestion();
 setPlanMode('course');
 document.getElementById('devoir').addEventListener('input', (event) => { ensureDefaultBullet(event.currentTarget); sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('rappel').addEventListener('input', (event) => { ensureDefaultBullet(event.currentTarget); sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
@@ -3156,12 +3364,22 @@ document.getElementById('devoir').addEventListener('keydown', handleSpecialListT
 document.getElementById('rappel').addEventListener('keydown', handleSpecialListTab);
 document.getElementById('pas-devoir').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('pas-rappel').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
-document.getElementById('num-cours').addEventListener('input', () => { courseNumberManuallyEdited = true; sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
+document.getElementById('num-cours').addEventListener('input', () => {
+  courseNumberManuallyEdited = true;
+  showSelectedGroupManualNumber();
+  sauvegarderPlanLocal();
+  syncSupplyFromCourse(true);
+});
 document.getElementById('date-cours').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('sans-numero').addEventListener('change', () => { sauvegarderPlanLocal(); syncSupplyFromCourse(true); });
 document.getElementById('avec-emojis').addEventListener('change', () => { sauvegarderPlanLocal(); });
 document.getElementById('enable-reuse-course').addEventListener('change', () => { sauvegarderPlanLocal(); });
-document.getElementById('activities-list').addEventListener('input', (e) => { if (e.target.classList.contains('rich-editor')) { sauvegarderPlanLocal(); syncSupplyFromCourse(true); } });
+document.getElementById('activities-list').addEventListener('input', (e) => {
+  if (!e.target.classList.contains('rich-editor')) return;
+  sauvegarderPlanLocal();
+  syncSupplyFromCourse(true);
+  scheduleSelectedGroupNumberSuggestion();
+});
 const supplyPanelHost = document.getElementById('left-plan-supply');
 const originalSupplyPanel = document.querySelector('#right-tab-supply .google-card');
 if (supplyPanelHost && originalSupplyPanel && !supplyPanelHost.hasChildNodes()) supplyPanelHost.appendChild(originalSupplyPanel);

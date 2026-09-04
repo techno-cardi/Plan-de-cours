@@ -277,6 +277,62 @@
   .row2 .field-group .date-input-wrapper,
   .row2 .field-group #date-cours { box-sizing: border-box; }
 
+  .course-group-selector {
+    margin-bottom: 16px;
+    padding: 12px;
+    border: 1px solid #eaded9;
+    border-radius: 11px;
+    background: #fdf9f7;
+  }
+  .course-group-selector-label {
+    display: block;
+    margin-bottom: 8px;
+    color: #705f58;
+    font: 700 .78rem 'DM Sans', sans-serif;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  .course-group-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .course-group-btn {
+    min-height: 51px;
+    padding: 7px 6px;
+    border: 1.5px solid #d9cfca;
+    border-radius: 9px;
+    background: #fff;
+    color: #4b3d37;
+    cursor: pointer;
+    font: 700 .88rem 'DM Sans', sans-serif;
+    transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .08s ease;
+  }
+  .course-group-btn small {
+    display: block;
+    margin-top: 2px;
+    color: #978a84;
+    font-size: .68rem;
+    font-weight: 600;
+  }
+  .course-group-btn:hover { border-color: #c0152a; }
+  .course-group-btn:active { transform: scale(.98); }
+  .course-group-btn.active {
+    border-color: var(--red);
+    background: #fff2f3;
+    color: var(--red);
+    box-shadow: 0 0 0 2px rgba(192, 21, 42, .09);
+  }
+  .course-group-btn.active small { color: #9f2435; }
+  .course-group-btn:focus-visible { outline: 3px solid rgba(196,18,44,.2); outline-offset: 2px; }
+  .course-group-number-status {
+    margin: 8px 1px 0;
+    color: #6d625d;
+    font: 600 .76rem/1.35 'DM Sans', sans-serif;
+  }
+  .course-group-number-status[data-state="error"] { color: #a50d24; }
+  .course-group-number-status[data-state="ok"] { color: #267447; }
+
   /* Date input wrapper */
   .date-input-wrapper {
     position: relative;
@@ -684,6 +740,7 @@
   .btn-group-publish:hover:not(:disabled) { background: #a50d24; }
   .btn-group-publish:active:not(:disabled) { transform: scale(.98); }
   .btn-group-publish:disabled { opacity: .38; cursor: not-allowed; }
+  .btn-group-publish.selected-group:not(:disabled) { box-shadow: 0 0 0 3px rgba(192,21,42,.17); }
   .btn-group-publish:focus-visible { outline:3px solid rgba(196,18,44,.25); outline-offset:2px; }
   @media (max-width: 520px) {
     .quick-classroom-publish { grid-template-columns: 1fr; }
@@ -1271,6 +1328,15 @@
     </div>
 
     <div id="left-plan-course">
+    <section class="course-group-selector" aria-labelledby="course-group-selector-label">
+      <span class="course-group-selector-label" id="course-group-selector-label">Groupe du plan</span>
+      <div class="course-group-options">
+        <button type="button" class="course-group-btn" id="btn-course-group-31" onclick="selectCourseGroup('31')" aria-pressed="false">Groupe 31<small id="course-group-number-31">Choisir</small></button>
+        <button type="button" class="course-group-btn" id="btn-course-group-32" onclick="selectCourseGroup('32')" aria-pressed="false">Groupe 32<small id="course-group-number-32">Choisir</small></button>
+        <button type="button" class="course-group-btn" id="btn-course-group-51" onclick="selectCourseGroup('51')" aria-pressed="false">Groupe 51<small id="course-group-number-51">Choisir</small></button>
+      </div>
+      <p class="course-group-number-status" id="course-group-number-status" role="status" aria-live="polite" hidden></p>
+    </section>
     <div class="row2">
       <div class="field-group">
         <label for="num-cours">Numéro de cours</label>
@@ -1509,7 +1575,7 @@
   </div>
 </main>
 
-<script src="app.js?v=1.0.28"></script>
+<script src="app.js?v=1.0.29"></script>
 
 <!-- Confirm reset modal -->
 <div class="confirm-overlay" id="confirm-reset-overlay" onclick="if(event.target===this)closeConfirmReset()">
@@ -1534,8 +1600,18 @@
     <button class="changelog-close" onclick="closeChangelog()" title="Fermer">×</button>
     <h2>Notes de mise à jour</h2>
     <div>
-      <span class="changelog-version-badge">v1.0.28</span>
+      <span class="changelog-version-badge">v1.0.29</span>
       <span class="changelog-date">Septembre 2026</span>
+    </div>
+
+    <div class="changelog-section">
+      <h3>Numéro automatique par groupe - v1.0.29</h3>
+      <ul>
+        <li>Le groupe 31, 32 ou 51 se choisit maintenant directement au-dessus du numéro de cours.</li>
+        <li>Le dernier numéro réellement publié dans ce groupe est lu dans Classroom, puis le prochain numéro est proposé automatiquement.</li>
+        <li>Un contenu semblable ou un cours repris conserve son numéro pour permettre une correction; un contenu différent passe au suivant.</li>
+        <li>Un numéro saisi à la main reste prioritaire jusqu’au prochain changement de groupe.</li>
+      </ul>
     </div>
 
     <div class="changelog-section">
@@ -1770,7 +1846,7 @@
 
 <footer style="text-align:center;padding:24px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:#aaa;border-top:1px solid #e2ddd8;margin-top:20px;">
   &copy; 2026 Kevin Tremblay &mdash; Équipe des technopédagogues de l'École Cardinal-Roy
-  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.28</button>
+  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.29</button>
   &mdash; <a href="https://raw.githubusercontent.com/techno-cardi/Plan-de-cours/main/Guide%20d'utilisation%20-%20G%C3%A9n%C3%A9rateur%20de%20plan%20de%20cours.pdf" target="_blank" rel="noopener noreferrer" style="color:#aaa;text-decoration:none;font-weight:600;" onmouseover="this.style.color='#C0152A'" onmouseout="this.style.color='#aaa'">📄 Guide d'utilisation</a>
 </footer>
 <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
