@@ -1993,21 +1993,25 @@ async function syncClassroomGroupBaseline(group, courseId) {
       // Une ancienne valeur locale ne suffit pas à prouver qu'un cours a été
       // publié. Un groupe sans annonce réelle repart donc proprement à #1.
       if (local) {
-        delete history[String(group)];
-        writeClassroomGroupHistory(history);
+        const currentHistory = readClassroomGroupHistory();
+        delete currentHistory[String(group)];
+        writeClassroomGroupHistory(currentHistory);
       }
       return { verified: true, baseline: null };
     }
     const announcement = latestPlan.announcement;
-    history[String(group)] = {
+    // Relire au dernier moment : les groupes sont synchronisés en parallèle
+    // et chacun doit fusionner sa valeur sans effacer celles déjà terminées.
+    const currentHistory = readClassroomGroupHistory();
+    currentHistory[String(group)] = {
       lastPublishedNumber: latestPlan.number,
       activities: extractActivitiesFromPublishedPlan(announcement.text),
       contentFingerprint: normalizePublishedPlanForComparison(announcement.text),
       courseId: String(courseId),
       publishedAt: announcement.creationTime || announcement.updateTime || new Date().toISOString()
     };
-    writeClassroomGroupHistory(history);
-    return { verified: true, baseline: history[String(group)] };
+    writeClassroomGroupHistory(currentHistory);
+    return { verified: true, baseline: currentHistory[String(group)] };
   } catch (error) {
     console.warn(`Dernier numéro Classroom indisponible pour le groupe ${group}`, error);
     return { verified: false, baseline: local };

@@ -286,6 +286,34 @@ assert.equal(syncedBaseline.verified, true);
 assert.equal(syncedBaseline.baseline.lastPublishedNumber, 3, 'Modifier un ancien cours ne doit pas faire reculer le numéro');
 assert.equal(writtenHistory['31'].courseId, 'course-31');
 
+let concurrentHistory = {};
+const concurrentBaselineContext = {
+  readClassroomGroupHistory: () => JSON.parse(JSON.stringify(concurrentHistory)),
+  writeClassroomGroupHistory: value => { concurrentHistory = JSON.parse(JSON.stringify(value)); },
+  extractActivitiesFromPublishedPlan: () => ['activité'],
+  normalizePublishedPlanForComparison: value => value,
+  console,
+  setTimeout,
+  apiFetch: async url => {
+    const group31 = url.includes('course-31');
+    if (group31) await new Promise(resolve => setTimeout(resolve, 20));
+    return {
+      announcements: [{
+        text: `Cours #${group31 ? 4 : 6}`,
+        creationTime: '2026-09-04T12:00:00Z',
+        updateTime: '2026-09-04T12:00:00Z'
+      }]
+    };
+  }
+};
+vm.createContext(concurrentBaselineContext);
+vm.runInContext(`${baselineSource}; this.syncBaseline = syncClassroomGroupBaseline;`, concurrentBaselineContext);
+await Promise.all([
+  concurrentBaselineContext.syncBaseline('31', 'course-31'),
+  concurrentBaselineContext.syncBaseline('32', 'course-32')
+]);
+assert.deepEqual(Object.keys(concurrentHistory).sort(), ['31', '32'], 'Les synchronisations parallèles ne doivent pas écraser un autre groupe');
+
 const extractStart = app.indexOf('function extractActivitiesFromPublishedPlan');
 const extractEnd = app.indexOf('async function syncClassroomGroupBaseline', extractStart);
 const extractSource = extractStart >= 0 && extractEnd > extractStart ? app.slice(extractStart, extractEnd).trim() : '';
