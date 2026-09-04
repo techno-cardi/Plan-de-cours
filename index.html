@@ -278,15 +278,15 @@
   .row2 .field-group #date-cours { box-sizing: border-box; }
 
   .course-group-selector {
-    margin-bottom: 16px;
-    padding: 12px;
+    margin-bottom: 12px;
+    padding: 8px 10px;
     border: 1px solid #eaded9;
     border-radius: 11px;
     background: #fdf9f7;
   }
   .course-group-selector-label {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
     color: #705f58;
     font: 700 .78rem 'DM Sans', sans-serif;
     letter-spacing: .05em;
@@ -295,22 +295,26 @@
   .course-group-options {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 6px;
   }
   .course-group-btn {
-    min-height: 51px;
-    padding: 7px 6px;
+    min-height: 34px;
+    padding: 5px 8px;
     border: 1.5px solid #d9cfca;
     border-radius: 9px;
     background: #fff;
     color: #4b3d37;
     cursor: pointer;
-    font: 700 .88rem 'DM Sans', sans-serif;
+    font: 700 .82rem 'DM Sans', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
     transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .08s ease;
   }
   .course-group-btn small {
-    display: block;
-    margin-top: 2px;
+    display: inline;
+    margin: 0;
     color: #978a84;
     font-size: .68rem;
     font-weight: 600;
@@ -332,6 +336,27 @@
   }
   .course-group-number-status[data-state="error"] { color: #a50d24; }
   .course-group-number-status[data-state="ok"] { color: #267447; }
+
+  .course-options {
+    margin-top: 12px;
+    border: 1px solid #e4d9d4;
+    border-radius: 10px;
+    background: #fdfaf8;
+  }
+  .course-options summary {
+    padding: 9px 12px;
+    color: #5f504a;
+    cursor: pointer;
+    font: 700 .82rem 'DM Sans', sans-serif;
+    user-select: none;
+  }
+  .course-options summary:hover { color: var(--red); }
+  .course-options summary:focus-visible { outline: 3px solid rgba(196,18,44,.18); outline-offset: 2px; }
+  .course-options-body {
+    padding: 2px 12px 12px;
+    border-top: 1px solid #eee4df;
+  }
+  .course-options-body .field-group { margin-top: 10px; }
 
   /* Date input wrapper */
   .date-input-wrapper {
@@ -1331,9 +1356,9 @@
     <section class="course-group-selector" aria-labelledby="course-group-selector-label">
       <span class="course-group-selector-label" id="course-group-selector-label">Groupe du plan</span>
       <div class="course-group-options">
-        <button type="button" class="course-group-btn" id="btn-course-group-31" onclick="selectCourseGroup('31')" aria-pressed="false">Groupe 31<small id="course-group-number-31">Choisir</small></button>
-        <button type="button" class="course-group-btn" id="btn-course-group-32" onclick="selectCourseGroup('32')" aria-pressed="false">Groupe 32<small id="course-group-number-32">Choisir</small></button>
-        <button type="button" class="course-group-btn" id="btn-course-group-51" onclick="selectCourseGroup('51')" aria-pressed="false">Groupe 51<small id="course-group-number-51">Choisir</small></button>
+        <button type="button" class="course-group-btn" id="btn-course-group-31" onclick="selectCourseGroup('31')" aria-pressed="false"><span>31</span><small id="course-group-number-31">—</small></button>
+        <button type="button" class="course-group-btn" id="btn-course-group-32" onclick="selectCourseGroup('32')" aria-pressed="false"><span>32</span><small id="course-group-number-32">—</small></button>
+        <button type="button" class="course-group-btn" id="btn-course-group-51" onclick="selectCourseGroup('51')" aria-pressed="false"><span>51</span><small id="course-group-number-51">—</small></button>
       </div>
       <p class="course-group-number-status" id="course-group-number-status" role="status" aria-live="polite" hidden></p>
     </section>
@@ -1342,10 +1367,6 @@
         <label for="num-cours">Numéro de cours</label>
         <input type="number" id="num-cours" placeholder="79" min="1">
         <p class="hint" id="num-hint" style="display:none;"></p>
-        <div class="checkbox-row" style="margin-top:8px;">
-          <input type="checkbox" id="sans-numero" onchange="toggleSansNumero()">
-          <span onclick="document.getElementById('sans-numero').click()">Ne pas numéroter le cours</span>
-        </div>
       </div>
       <div class="field-group" style="position:relative;">
         <label>Date</label>
@@ -1361,35 +1382,42 @@
       </div>
     </div>
 
-    <!-- Options titre -->
-    <div class="field-group" id="emoji-option-row" style="margin-top:14px;" hidden>
-      <div class="checkbox-row">
-        <input type="checkbox" id="avec-emojis" checked>
-        <span onclick="document.getElementById('avec-emojis').click()">Inclure des emojis dans le titre</span>
-      </div>
-    </div>
-
-    <div class="field-group" style="margin-top:14px;">
-      <div class="checkbox-row">
-        <input type="checkbox" id="enable-reuse-course" onchange="toggleReuseCourse()">
-        <span onclick="document.getElementById('enable-reuse-course').click()">Réutiliser un cours existant</span>
-      </div>
-      <div id="reuse-course-box" style="display:none;">
-        <label for="reuse-course-select">Cours enregistrés</label>
-        <div class="course-reuse-row">
-          <select id="reuse-course-select"><option value="">Choisir un cours</option></select>
-          <button type="button" id="btn-delete-course" class="btn-delete-course" onclick="deleteSelectedCourse()">Effacer</button>
+    <details class="course-options" id="course-options">
+      <summary>Options du cours</summary>
+      <div class="course-options-body">
+        <div class="checkbox-row">
+          <input type="checkbox" id="sans-numero" onchange="toggleSansNumero()">
+          <span onclick="document.getElementById('sans-numero').click()">Ne pas numéroter le cours</span>
         </div>
-        <p class="hint">Choisissez un cours déjà généré pour remplir automatiquement les champs.</p>
+        <div class="field-group" id="emoji-option-row" hidden>
+          <div class="checkbox-row">
+            <input type="checkbox" id="avec-emojis" checked>
+            <span onclick="document.getElementById('avec-emojis').click()">Inclure des emojis dans le titre</span>
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="checkbox-row">
+            <input type="checkbox" id="enable-reuse-course" onchange="toggleReuseCourse()">
+            <span onclick="document.getElementById('enable-reuse-course').click()">Réutiliser un cours existant</span>
+          </div>
+          <div id="reuse-course-box" style="display:none;">
+            <label for="reuse-course-select">Cours enregistrés</label>
+            <div class="course-reuse-row">
+              <select id="reuse-course-select"><option value="">Choisir un cours</option></select>
+              <button type="button" id="btn-delete-course" class="btn-delete-course" onclick="deleteSelectedCourse()">Effacer</button>
+            </div>
+            <p class="hint">Choisissez un cours déjà généré pour remplir automatiquement les champs.</p>
+          </div>
+          <div class="checkbox-row" style="margin-top:10px;">
+            <input type="checkbox" id="keep-form-filled" onchange="toggleKeepFormFilled()">
+            <span class="keep-form-label" onclick="document.getElementById('keep-form-filled').click()">
+              Conserver les informations entre les sessions
+              <span class="keep-form-tooltip">Les activités, les options du formulaire, la date, le numéro de cours, le devoir, le rappel et la planification de suppléance restent en mémoire d'une visite à l'autre. Décochez pour repartir d'un formulaire vide à chaque ouverture.</span>
+            </span>
+          </div>
+        </div>
       </div>
-      <div class="checkbox-row" style="margin-top:10px;">
-        <input type="checkbox" id="keep-form-filled" onchange="toggleKeepFormFilled()">
-        <span class="keep-form-label" onclick="document.getElementById('keep-form-filled').click()">
-          Conserver les informations entre les sessions
-          <span class="keep-form-tooltip">Les activités, les options du formulaire, la date, le numéro de cours, le devoir, le rappel et la planification de suppléance restent en mémoire d'une visite à l'autre. Décochez pour repartir d'un formulaire vide à chaque ouverture.</span>
-        </span>
-      </div>
-    </div>
+    </details>
 
     <!-- Activities -->
     <div class="activities-section">
@@ -1575,7 +1603,7 @@
   </div>
 </main>
 
-<script src="app.js?v=1.0.30"></script>
+<script src="app.js?v=1.0.31"></script>
 
 <!-- Confirm reset modal -->
 <div class="confirm-overlay" id="confirm-reset-overlay" onclick="if(event.target===this)closeConfirmReset()">
@@ -1600,8 +1628,17 @@
     <button class="changelog-close" onclick="closeChangelog()" title="Fermer">×</button>
     <h2>Notes de mise à jour</h2>
     <div>
-      <span class="changelog-version-badge">v1.0.30</span>
+      <span class="changelog-version-badge">v1.0.31</span>
       <span class="changelog-date">Septembre 2026</span>
+    </div>
+
+    <div class="changelog-section">
+      <h3>Interface compacte et Classroom conservé - v1.0.31</h3>
+      <ul>
+        <li>Les groupes affichent maintenant le prochain numéro proposé dans des boutons plus compacts.</li>
+        <li>Les réglages secondaires sont rangés dans « Options du cours », replié par défaut.</li>
+        <li>Après une publication réussie, l’onglet Classroom reste ouvert pendant que le générateur redevient actif.</li>
+      </ul>
     </div>
 
     <div class="changelog-section">
@@ -1854,7 +1891,7 @@
 
 <footer style="text-align:center;padding:24px;font-family:'DM Sans',sans-serif;font-size:0.78rem;color:#aaa;border-top:1px solid #e2ddd8;margin-top:20px;">
   &copy; 2026 Kevin Tremblay &mdash; Équipe des technopédagogues de l'École Cardinal-Roy
-  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.30</button>
+  &mdash; <button class="changelog-trigger" onclick="openChangelog()">v1.0.31</button>
   &mdash; <a href="https://raw.githubusercontent.com/techno-cardi/Plan-de-cours/main/Guide%20d'utilisation%20-%20G%C3%A9n%C3%A9rateur%20de%20plan%20de%20cours.pdf" target="_blank" rel="noopener noreferrer" style="color:#aaa;text-decoration:none;font-weight:600;" onmouseover="this.style.color='#C0152A'" onmouseout="this.style.color='#aaa'">📄 Guide d'utilisation</a>
 </footer>
 <div id="toast-container" aria-live="polite" aria-atomic="false"></div>

@@ -40,7 +40,7 @@ async function finishJob(job, outcome, error = '') {
     await chrome.storage.local.remove(JOB_KEY).catch(() => {});
     await chrome.alarms.clear(WATCHDOG_ALARM).catch(() => {});
     await chrome.tabs.update(job.sourceTabId, { active: true }).catch(() => {});
-    if (job.classroomTabId && job.classroomTabId !== job.sourceTabId) {
+    if (outcome !== 'published' && job.classroomTabId && job.classroomTabId !== job.sourceTabId) {
       await chrome.tabs.remove(job.classroomTabId).catch(() => {});
     }
   }

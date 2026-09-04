@@ -24,10 +24,10 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.10');
+assert.equal(manifest.version, '1.0.11');
 assert.deepEqual(manifest.permissions.sort(), ['alarms', 'debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.10'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.11'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
 assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
 assert.match(nativeGenerator, /pdcNativeRequestAck/);
@@ -137,7 +137,7 @@ assert.equal(tabMessages[0].message.outcome, 'published');
 assert.equal(stored.pdcNativeClassroomLastResult.outcome, 'published');
 assert.equal(updatedTabs[0].tabId, 101);
 assert.equal(updatedTabs[0].options.active, true);
-assert.deepEqual(removedTabs, [202]);
+assert.deepEqual(removedTabs, [], 'L’onglet Classroom doit rester ouvert après une publication réussie');
 
 stored.pdcNativeClassroomJob = {
   requestId: 'stuck', createdAt: Date.now() - 10000, updatedAt: Date.now() - 10000,
@@ -215,12 +215,22 @@ assert.match(app, /querySelectorAll\('li > li'\)/);
 assert.match(app, /event\.shiftKey \? 'outdent' : 'indent'/);
 assert.match(app, /primaryItems \|\| richToStructuredLines/);
 assert.match(app, /durableIndent = '&nbsp;'\.repeat\(depth \* 4\)/);
-assert.match(index, /app\.js\?v=1\.0\.30/);
-assert.match(index, /changelog-version-badge">v1\.0\.30/);
+assert.match(index, /app\.js\?v=1\.0\.31/);
+assert.match(index, /changelog-version-badge">v1\.0\.31/);
 assert.match(index, /id="btn-course-group-31"/);
 assert.match(index, /id="btn-course-group-32"/);
 assert.match(index, /id="btn-course-group-51"/);
 assert.match(index, /id="course-group-number-status"/);
+const courseOptionsStart = index.indexOf('<details class="course-options"');
+const courseOptionsEnd = index.indexOf('</details>', courseOptionsStart);
+const courseOptions = courseOptionsStart >= 0 && courseOptionsEnd > courseOptionsStart
+  ? index.slice(courseOptionsStart, courseOptionsEnd)
+  : '';
+assert.ok(courseOptions, 'Le panneau repliable « Options du cours » doit être présent');
+assert.doesNotMatch(courseOptions.slice(0, courseOptions.indexOf('>') + 1), /\sopen(?:\s|=|>)/, 'Les options doivent être repliées au chargement');
+for (const id of ['sans-numero', 'avec-emojis', 'enable-reuse-course', 'keep-form-filled']) {
+  assert.match(courseOptions, new RegExp(`id="${id}"`), `${id} doit se trouver dans les options repliables`);
+}
 
 const numberingStart = app.indexOf('function calculateCourseNumberForGroup');
 const numberingEnd = app.indexOf('function setCourseGroupNumberStatus', numberingStart);
@@ -359,8 +369,8 @@ dateContext.restoreDate({ dateISO: '2026-08-29T12:00:00.000Z', dateDisplay: '28 
 assert.equal(dateInput.value, expectedToday);
 dateContext.restoreDate({ dateDisplay: '7 septembre 2026' });
 assert.equal(dateInput.value, expectedToday);
-assert.match(index, /app\.js\?v=1\.0\.30/);
-assert.match(index, /v1\.0\.30/);
+assert.match(index, /app\.js\?v=1\.0\.31/);
+assert.match(index, /v1\.0\.31/);
 assert.match(index, /onclick="refreshCoursePreview\(\)"/);
 assert.match(app, /async function refreshCoursePreview\(\)/);
 assert.match(app, /await generer\(\)/);

@@ -1,6 +1,6 @@
-# Pont natif Classroom v1.0.10
+# Pont natif Classroom v1.0.11
 
-Ce module Chrome accompagne le userscript `classroom-rich-publish.user.js` à partir de la version 1.2.2. La v1.0.10 attend désormais l'hydratation réelle du bouton « Nouvelle annonce », reconnaît plusieurs variantes de l'éditeur Classroom et retente proprement son ouverture sans créer de brouillon supplémentaire. Elle conserve aussi la récupération automatique des publications interrompues.
+Ce module Chrome accompagne le userscript `classroom-rich-publish.user.js` à partir de la version 1.2.2. La v1.0.11 laisse l’onglet Classroom ouvert après une publication réussie, tout en fermant les onglets abandonnés ou en erreur. Elle conserve l’attente de l’hydratation réelle du bouton « Nouvelle annonce », la reconnaissance des variantes de l’éditeur Classroom et la récupération automatique des publications interrompues.
 
 Il remplace définitivement les RPC internes de Classroom. Après un clic sur Groupe 31, Groupe 32 ou Groupe 51, il ouvre le cours exact, utilise l’éditeur officiel, déclenche un vrai collage clavier depuis le HTML placé dans le presse-papier par Tampermonkey, vérifie le gras, le soulignement et le contenu, puis clique sur le bouton Publier natif. Une publication n’est déclarée réussie qu’après sa présence dans le flux.
 

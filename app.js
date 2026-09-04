@@ -2085,15 +2085,23 @@ function setCourseGroupNumberStatus(text, state = '') {
 
 function updateCourseGroupNumberBadges() {
   const history = readClassroomGroupHistory();
+  const activities = getCurrentCourseActivitiesForHistory();
   QUICK_CLASSROOM_GROUPS.forEach(group => {
     const badge = document.getElementById(`course-group-number-${group}`);
     if (!badge) return;
     const state = classroomGroupBaselineState[group];
     const baseline = history[group] || null;
-    if (state?.status === 'loading') badge.textContent = 'Vérification…';
-    else if (baseline?.lastPublishedNumber) badge.textContent = `Dernier #${baseline.lastPublishedNumber}`;
-    else if (state?.status === 'verified') badge.textContent = 'Aucun cours';
-    else badge.textContent = 'Choisir';
+    if (state?.status === 'loading') badge.textContent = '· …';
+    else if (baseline?.lastPublishedNumber || state?.status === 'verified') {
+      const decision = calculateCourseNumberForGroup(group, activities, { entered: '', explicitNumber: false });
+      badge.textContent = `· #${decision.number}`;
+      badge.title = baseline?.lastPublishedNumber
+        ? `Dernier cours publié : #${baseline.lastPublishedNumber}. Numéro proposé : #${decision.number}.`
+        : `Premier cours proposé : #${decision.number}.`;
+    } else {
+      badge.textContent = '· —';
+      badge.removeAttribute('title');
+    }
   });
 }
 
