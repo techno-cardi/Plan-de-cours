@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const userscript = fs.readFileSync(new URL('../classroom-rich-publish.user.js', import.meta.url), 'utf8');
-const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.2.2.user.js', import.meta.url), 'utf8');
+const versionedUserscript = fs.readFileSync(new URL('../classroom-rich-publish-v1.3.0.user.js', import.meta.url), 'utf8');
 const index = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(new URL('../chrome-classroom-native-bridge/manifest.json', import.meta.url), 'utf8'));
@@ -11,8 +11,8 @@ const nativeBackground = fs.readFileSync(new URL('../chrome-classroom-native-bri
 const nativeGenerator = fs.readFileSync(new URL('../chrome-classroom-native-bridge/generator.js', import.meta.url), 'utf8');
 const nativeClassroom = fs.readFileSync(new URL('../chrome-classroom-native-bridge/classroom.js', import.meta.url), 'utf8');
 
-assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie v1.2.2 doit correspondre au script canonique');
-assert.match(userscript, /@version\s+1\.2\.2/);
+assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie versionnée doit correspondre au script canonique');
+assert.match(userscript, /@version\s+1\.3\.0/);
 assert.match(userscript, /dataset\.pdcClassroomBridgeVersion = VERSION/);
 assert.match(userscript, /PDC_NATIVE_PUBLISH_REQUEST/);
 assert.match(userscript, /dataset\.pdcClassroomBridgeMode = 'native-extension'/);
@@ -24,10 +24,10 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.0.11');
+assert.equal(manifest.version, '1.1.0');
 assert.deepEqual(manifest.permissions.sort(), ['alarms', 'debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.0\.11'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.1\.0'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
 assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
 assert.match(nativeGenerator, /pdcNativeRequestAck/);
@@ -41,7 +41,7 @@ assert.match(nativeBackground, /finishJob/);
 assert.match(nativeBackground, /tabs\.update\(job\.sourceTabId, \{ active: true \}\)/);
 assert.match(nativeClassroom, /type: 'activate'/);
 assert.match(nativeClassroom, /publish\.click\(\)/);
-assert.match(nativeClassroom, /const retry = visibleButtons\('Publier'/);
+assert.match(nativeClassroom, /const retry = visibleButtons\(publishLabel/);
 assert.doesNotMatch(nativeClassroom, /duplicateVisible/);
 assert.match(nativeClassroom, /function newAnnouncementButton/);
 assert.match(nativeClassroom, /main button, main \[role="button"\]/);
@@ -61,12 +61,9 @@ assert.doesNotMatch(app, /quick-classroom-status|Prêts :/);
 assert.match(index, /v1\.0\.17/);
 assert.match(app, /MutationObserver\(readNativeClassroomResult\)/);
 assert.match(app, /data-pdc-native-publish-result/);
-assert.match(app, /baseline\.baseline\?\.contentFingerprint && baseline\.baseline\.contentFingerprint === contentFingerprint/);
 assert.doesNotMatch(app, /baseline\.baseline && numbering\.similarity !== null && !numbering\.changed/);
 assert.match(app, /explicitNumber = !!options\.explicitNumber && enteredIsValid/);
 assert.match(app, /'manual-correction'/);
-assert.match(app, /'loaded-correction'/);
-assert.match(app, /btn\.textContent = `Groupe \$\{group\}`/);
 const disconnectStart = app.indexOf('async function googleDisconnect');
 const disconnectEnd = app.indexOf('async function afterGoogleLogin', disconnectStart);
 const disconnectSource = disconnectStart >= 0 && disconnectEnd > disconnectStart ? app.slice(disconnectStart, disconnectEnd) : '';
@@ -152,7 +149,19 @@ const recovered = await backgroundContext.handleMessage({ type: 'prepare', paylo
 } }, { tab: { id: 101, windowId: 77, url: 'https://techno-cardi.github.io/Plan-de-cours/' } });
 assert.equal(recovered.ok, true, 'Une tâche qui ne répond plus doit être remplacée automatiquement');
 assert.equal(stored.pdcNativeClassroomJob.requestId, 'r2');
-assert.ok(removedTabs.includes(303));
+assert.deepEqual(removedTabs, [], 'Un onglet en erreur doit rester disponible pour récupérer le contenu');
+await backgroundContext.finishJob(stored.pdcNativeClassroomJob, 'failed', 'test interrompu');
+const editPrepared = await backgroundContext.handleMessage({ type: 'prepare', payload: {
+  requestId: 'edit-1', courseId: '875523698222', group: '31',
+  alternateLink: 'https://classroom.google.com/c/ODc1NTIzNjk4MjIy/p/ODI2MzUxMDc1MTgw',
+  announcementId: '826351075180', originalText: 'Cours #1\nAncien contenu',
+  text: 'Cours #1\nContenu corrigé', title: 'Cours #1'
+} }, { tab: { id: 101, windowId: 77, url: 'https://techno-cardi.github.io/Plan-de-cours/' } });
+assert.equal(editPrepared.ok, true);
+assert.equal(stored.pdcNativeClassroomJob.announcementId, '826351075180');
+assert.equal(stored.pdcNativeClassroomJob.originalText, 'Cours #1\nAncien contenu');
+await backgroundContext.finishJob(stored.pdcNativeClassroomJob, 'published');
+assert.deepEqual(removedTabs, [], 'Une correction réussie doit également conserver Classroom ouvert');
 
 const sanitizerStart = userscript.indexOf('function decodeHtmlText');
 const sanitizerEnd = userscript.indexOf('function installGeneratorBridge', sanitizerStart);
@@ -198,6 +207,24 @@ vm.runInContext(`${fingerprintSource}; this.fingerprint = normalizePublishedPlan
 assert.equal(fingerprintContext.fingerprint('Cours #2 🍂\nDevoir : Lire'), fingerprintContext.fingerprint('Cours #2 📚\nDevoir : Lire'));
 assert.equal(fingerprintContext.fingerprint('Cours #2 (1 septembre 2026)'), fingerprintContext.fingerprint('Cours #2 (1er septembre 2026)'));
 assert.notEqual(fingerprintContext.fingerprint('Cours #2\nDevoir : Lire'), fingerprintContext.fingerprint('Cours #2\nDevoir : Écrire'));
+vm.runInContext('this.key = publicationContentKey;', fingerprintContext);
+assert.equal(fingerprintContext.key('Cours #4 (13 septembre 2026) 🍎\n1️⃣ Lire\nDevoir : écrire'), fingerprintContext.key('Cours #5 (13 septembre 2026) 🍂\n1️⃣ Lire\nDevoir : écrire'), 'Changer uniquement le numéro ou les emojis ne doit pas contourner les doublons');
+assert.notEqual(fingerprintContext.key('Cours #4 (13 septembre 2026)\nLire'), fingerprintContext.key('Cours #5 (14 septembre 2026)\nLire'), 'Une nouvelle séance un autre jour peut reprendre les mêmes activités');
+const duplicateStart = app.indexOf('    const identical =');
+const duplicateEnd = app.indexOf('    if (identical)', duplicateStart);
+const duplicateDecision = app.slice(duplicateStart, duplicateEnd);
+function blocksDuplicate(text, editing) {
+  const context = vm.createContext({
+    classroomPublishedPlans: { '31': [{ id: '123', text: 'Cours #4\nIl a terminé.' }] },
+    group: '31', editTarget: editing ? { id: '123' } : null,
+    latestGeneratedText: text, publicationContentKey: fingerprintContext.key
+  });
+  return vm.runInContext(`${duplicateDecision}; Boolean(identical)`, context);
+}
+assert.equal(blocksDuplicate('Cours #5\nIl a terminé.', false), true);
+assert.equal(blocksDuplicate('Cours #4\nIl à terminé.', true), false, 'Une correction explicite d’accent doit être transmise');
+assert.equal(blocksDuplicate('Cours #4\nIl a terminé!', true), false, 'Une correction explicite de ponctuation doit être transmise');
+assert.equal(blocksDuplicate('Cours #4\nIl a terminé.', true), false, 'Une correction de mise en forme doit pouvoir garder le même texte');
 assert.match(app, /CLASSROOM_GROUP_HISTORY_BACKUP_KEY/);
 assert.match(app, /result\.outcome === 'published'/);
 assert.match(app, /announcements\?orderBy=updateTime%20desc&pageSize=100/);
@@ -215,8 +242,8 @@ assert.match(app, /querySelectorAll\('li > li'\)/);
 assert.match(app, /event\.shiftKey \? 'outdent' : 'indent'/);
 assert.match(app, /primaryItems \|\| richToStructuredLines/);
 assert.match(app, /durableIndent = '&nbsp;'\.repeat\(depth \* 4\)/);
-assert.match(index, /app\.js\?v=1\.0\.31/);
-assert.match(index, /changelog-version-badge">v1\.0\.31/);
+assert.match(index, /app\.js\?v=1\.0\.32/);
+assert.match(index, /changelog-version-badge">v1\.0\.32/);
 assert.match(index, /id="btn-course-group-31"/);
 assert.match(index, /id="btn-course-group-32"/);
 assert.match(index, /id="btn-course-group-51"/);
@@ -236,29 +263,36 @@ const numberingStart = app.indexOf('function calculateCourseNumberForGroup');
 const numberingEnd = app.indexOf('function setCourseGroupNumberStatus', numberingStart);
 const numberingSource = numberingStart >= 0 && numberingEnd > numberingStart ? app.slice(numberingStart, numberingEnd).trim() : '';
 assert.ok(numberingSource, 'Décision intelligente de numérotation absente');
-function runNumbering({ manual, loaded, entered }) {
+function runNumbering({ manual, loaded, entered, similarity = 0.1, editTarget = null }) {
   const input = { value: String(entered) };
   const withoutNumber = { checked: true };
   const context = {
     courseNumberManuallyEdited: manual,
+    classroomEditTarget: editTarget,
     currentLoadedCourseId: loaded ? 'saved-2' : '',
     savedCourses: loaded ? [{ id: 'saved-2', courseNumber: '2' }] : [],
     readClassroomGroupHistory: () => ({ '31': { lastPublishedNumber: 2, activities: ['Ancienne activité'] } }),
-    courseActivitySimilarity: () => 0.1,
+    courseActivitySimilarity: () => similarity,
     document: { getElementById: id => id === 'num-cours' ? input : withoutNumber },
     toggleSansNumero() {}, saveNumCours() {}, sauvegarderPlanLocal() {}
   };
   vm.createContext(context);
   vm.runInContext(`${numberingSource}; this.choose = chooseCourseNumberForGroup;`, context);
-  return context.choose('31', ['Activité complètement corrigée']);
+  const decision = context.choose('31', ['Activité complètement corrigée']);
+  assert.equal(withoutNumber.checked, false, 'Choisir un cours numéroté, même en modification, doit désactiver le mode sans numéro');
+  assert.equal(input.value, String(decision.number));
+  return decision;
 }
 assert.deepEqual({ ...runNumbering({ manual: false, loaded: false, entered: 2 }) }, { number: 3, changed: true, similarity: 0.1, intent: 'new-course', previousNumber: 2 });
 assert.deepEqual({ ...runNumbering({ manual: true, loaded: false, entered: 2 }) }, { number: 2, changed: false, similarity: 0.1, intent: 'manual-correction', previousNumber: 2 });
-assert.deepEqual({ ...runNumbering({ manual: false, loaded: true, entered: 2 }) }, { number: 2, changed: false, similarity: 0.1, intent: 'loaded-correction', previousNumber: 2 });
+assert.deepEqual({ ...runNumbering({ manual: false, loaded: true, entered: 2 }) }, { number: 3, changed: true, similarity: 0.1, intent: 'new-course', previousNumber: 2 });
+assert.equal(runNumbering({ manual: false, loaded: false, entered: 2, similarity: 1 }).number, 3, 'Un nouveau cours avec les mêmes activités doit avancer');
+assert.equal(runNumbering({ manual: false, entered: 99, editTarget: { group: '31', number: 1 } }).number, 1, 'Une correction explicite conserve le numéro de la cible');
 assert.deepEqual({ ...(() => {
   const input = { value: '2' };
   const context = {
     courseNumberManuallyEdited: false,
+    classroomEditTarget: null,
     currentLoadedCourseId: '',
     savedCourses: [],
     readClassroomGroupHistory: () => ({ '31': { lastPublishedNumber: 2, activities: ['Ancienne activité'] } }),
@@ -272,20 +306,21 @@ assert.deepEqual({ ...(() => {
 })() }, { number: 3, changed: true, similarity: 0, intent: 'new-course', previousNumber: 2 });
 
 const baselineStart = app.indexOf('async function syncClassroomGroupBaseline');
-const baselineEnd = app.indexOf('function calculateCourseNumberForGroup', baselineStart);
+const baselineEnd = app.indexOf('function renderPublishedPlanOptions', baselineStart);
 const baselineSource = baselineStart >= 0 && baselineEnd > baselineStart ? app.slice(baselineStart, baselineEnd).trim() : '';
 assert.ok(baselineSource, 'Synchronisation Classroom par groupe absente');
 let writtenHistory = null;
 const baselineContext = {
+  classroomPublishedPlans: {}, renderPublishedPlanOptions() {},
   readClassroomGroupHistory: () => ({}),
   writeClassroomGroupHistory: value => { writtenHistory = value; },
   extractActivitiesFromPublishedPlan: () => ['activité'],
   normalizePublishedPlanForComparison: value => value,
   console,
   apiFetch: async url => url.includes('pageToken=page-2')
-    ? { announcements: [{ text: 'Cours #3 (3 septembre 2026)', creationTime: '2026-09-03T12:00:00Z', updateTime: '2026-09-03T12:00:00Z' }] }
+    ? { announcements: [{ state: 'PUBLISHED', text: 'Cours #3 (3 septembre 2026)', creationTime: '2026-09-03T12:00:00Z', updateTime: '2026-09-03T12:00:00Z' }, {state:'DRAFT', text:'Cours #99'}] }
     : {
-        announcements: [{ text: 'Cours #1 (1er septembre 2026)', creationTime: '2026-09-04T12:00:00Z', updateTime: '2026-09-04T12:00:00Z' }],
+        announcements: [{ state: 'PUBLISHED', text: 'Cours #1 (1er septembre 2026)', creationTime: '2026-09-04T12:00:00Z', updateTime: '2026-09-04T12:00:00Z' }],
         nextPageToken: 'page-2'
       }
 };
@@ -298,6 +333,7 @@ assert.equal(writtenHistory['31'].courseId, 'course-31');
 
 let concurrentHistory = {};
 const concurrentBaselineContext = {
+  classroomPublishedPlans: {}, renderPublishedPlanOptions() {},
   readClassroomGroupHistory: () => JSON.parse(JSON.stringify(concurrentHistory)),
   writeClassroomGroupHistory: value => { concurrentHistory = JSON.parse(JSON.stringify(value)); },
   extractActivitiesFromPublishedPlan: () => ['activité'],
@@ -309,6 +345,7 @@ const concurrentBaselineContext = {
     if (group31) await new Promise(resolve => setTimeout(resolve, 20));
     return {
       announcements: [{
+        state: 'PUBLISHED',
         text: `Cours #${group31 ? 4 : 6}`,
         creationTime: '2026-09-04T12:00:00Z',
         updateTime: '2026-09-04T12:00:00Z'
@@ -369,8 +406,8 @@ dateContext.restoreDate({ dateISO: '2026-08-29T12:00:00.000Z', dateDisplay: '28 
 assert.equal(dateInput.value, expectedToday);
 dateContext.restoreDate({ dateDisplay: '7 septembre 2026' });
 assert.equal(dateInput.value, expectedToday);
-assert.match(index, /app\.js\?v=1\.0\.31/);
-assert.match(index, /v1\.0\.31/);
+assert.match(index, /app\.js\?v=1\.0\.32/);
+assert.match(index, /v1\.0\.32/);
 assert.match(index, /onclick="refreshCoursePreview\(\)"/);
 assert.match(app, /async function refreshCoursePreview\(\)/);
 assert.match(app, /await generer\(\)/);

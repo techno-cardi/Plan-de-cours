@@ -40,9 +40,8 @@ async function finishJob(job, outcome, error = '') {
     await chrome.storage.local.remove(JOB_KEY).catch(() => {});
     await chrome.alarms.clear(WATCHDOG_ALARM).catch(() => {});
     await chrome.tabs.update(job.sourceTabId, { active: true }).catch(() => {});
-    if (outcome !== 'published' && job.classroomTabId && job.classroomTabId !== job.sourceTabId) {
-      await chrome.tabs.remove(job.classroomTabId).catch(() => {});
-    }
+    // Garder le flux ou l’éditeur ouvert, même si la confirmation tarde :
+    // fermer cet onglet peut masquer une publication réussie ou un brouillon à récupérer.
   }
 }
 
@@ -118,6 +117,7 @@ async function handleMessage(message, sender) {
     const target = new URL(payload.alternateLink || '');
     if (target.origin !== 'https://classroom.google.com' || !/\/c\//.test(target.pathname)) throw new Error('destination Classroom invalide');
     if (!String(payload.text || '').trim() || !String(payload.title || '').trim()) throw new Error('plan vide');
+    if (payload.announcementId && (!/^\d+$/.test(String(payload.announcementId)) || !String(payload.originalText || '').trim())) throw new Error('annonce à modifier invalide');
     let existing = await readJob();
     if (existing && await clearAbandonedJob(existing)) existing = null;
     if (existing && ['opening', 'claimed', 'pasting', 'publishing'].includes(existing.status)) {
@@ -133,6 +133,8 @@ async function handleMessage(message, sender) {
       courseName: String(payload.courseName || ''),
       courseSection: String(payload.courseSection || ''),
       alternateLink: target.toString(),
+      announcementId: String(payload.announcementId || ''),
+      originalText: String(payload.originalText || ''),
       text: String(payload.text),
       title: String(payload.title),
       probes: Array.isArray(payload.probes) ? payload.probes.map(String).slice(0, 5) : [],

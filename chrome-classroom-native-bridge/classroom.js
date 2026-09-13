@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.0.11';
+  const VERSION = '1.1.0';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let activeRequestId = '';
   let activePhase = 'idle';
@@ -42,6 +42,7 @@
     return Array.from(root.querySelectorAll('button,[role="button"]')).filter(button => {
       if (!button.getClientRects().length) return false;
       const labels = [
+        button.textContent,
         button.getAttribute('aria-label'),
         button.getAttribute('title'),
         ...Array.from(button.querySelectorAll('[jsname="V67aGc"],span')).map(node => node.textContent)
@@ -96,6 +97,32 @@
     return null;
   }
 
+  function announcementCard(id) {
+    return Array.from(document.querySelectorAll('[data-stream-item-id]'))
+      .find(node => node.getAttribute('data-stream-item-id') === String(id) && node.querySelector('[aria-haspopup="menu"]')) || null;
+  }
+
+  async function openExistingAnnouncement(job) {
+    if (announcementEditor()) throw new Error('Un éditeur est déjà ouvert. Fermez-le avant de modifier cette annonce.');
+    const card = await waitFor(() => announcementCard(job.announcementId), 30000, 200);
+    if (!card) throw new Error('L’annonce sélectionnée est introuvable. Aucune nouvelle annonce ne sera créée.');
+    const menu = Array.from(card.querySelectorAll('[aria-haspopup="menu"]'))
+      .find(button => fold(button.getAttribute('aria-label')).includes("options d'annonce"));
+    if (!menu) throw new Error('Menu de modification de cette annonce introuvable.');
+    await send({ type: 'activate' });
+    menu.scrollIntoView({ block: 'center' });
+    menu.click();
+    const modify = await waitFor(() => Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find(node => node.getClientRects().length && fold(node.textContent) === 'modifier'), 6000);
+    if (!modify) throw new Error('Commande Modifier introuvable pour cette annonce.');
+    modify.click();
+    const editor = await waitFor(announcementEditor, 10000);
+    if (!editor || fold(editor.innerText) !== fold(job.originalText)) {
+      throw new Error('Le contenu de cette annonce a changé. Actualisez sa sélection avant de la remplacer.');
+    }
+    return editor;
+  }
+
   function hasStyledText(root, text, kind) {
     const wanted = fold(text);
     return Array.from(root.querySelectorAll('*')).some(node => {
@@ -141,10 +168,19 @@
         return;
       }
       await waitFor(() => document.body?.innerText?.includes(job.courseName || `Groupe ${job.group}`), 12000);
-      const editor = await openAnnouncementEditor();
+      const existingIds = new Set(Array.from(document.querySelectorAll('[data-stream-item-id]')).map(node => node.getAttribute('data-stream-item-id')));
+      const editor = job.announcementId ? await openExistingAnnouncement(job) : await openAnnouncementEditor();
       if (!editor) throw new Error('éditeur natif Classroom introuvable');
+      if (!job.announcementId && fold(editor.innerText)) throw new Error('Cet éditeur contient déjà un brouillon. Il a été conservé.');
       editor.focus();
       editor.click();
+      if (job.announcementId) {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
       showBanner(`Collage riche natif en cours dans ${job.courseName || `Groupe ${job.group}`}…`);
       activePhase = 'pasting';
       await send({ type: 'paste' });
@@ -159,8 +195,9 @@
       if (!titleUnderlined || !devoirBold) console.warn('[Plan de cours] Classroom a masqué ses styles dans le DOM; le collage riche est conservé et sera publié.');
 
       const dialog = editor.closest('[data-is-edit-mode="true"]') || editor.closest('[role="dialog"]');
+      const publishLabel = job.announcementId ? 'Enregistrer' : 'Publier';
       const publish = await waitFor(() => {
-        return visibleButtons('Publier', dialog || document)
+        return visibleButtons(publishLabel, dialog || document)
           .find(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
       }, 7000);
       if (!publish) throw new Error('bouton Publier natif inactif');
@@ -170,7 +207,7 @@
       publish.click();
       await sleep(1500);
       if (document.body.contains(editor)) {
-        const refreshed = visibleButtons('Publier', dialog || document)
+        const refreshed = visibleButtons(publishLabel, dialog || document)
           .find(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
         if (refreshed) {
           refreshed.scrollIntoView({ block: 'center', inline: 'nearest' });
@@ -180,7 +217,7 @@
       }
       await sleep(2000);
       if (document.body.contains(editor)) {
-        const retry = visibleButtons('Publier', dialog || document)
+        const retry = visibleButtons(publishLabel, dialog || document)
           .find(button => !button.disabled && button.getAttribute('aria-disabled') !== 'true') || null;
         if (retry) {
           const rect = retry.getBoundingClientRect();
@@ -189,7 +226,12 @@
       }
 
       activePhase = 'verifying';
-      const visible = await waitFor(() => !document.body.contains(editor) && fold(document.body.innerText).includes(fold(job.title)), 30000, 250);
+      const visible = await waitFor(() => {
+        if (announcementEditor()) return null;
+        const candidates = job.announcementId ? [announcementCard(job.announcementId)]
+          : Array.from(document.querySelectorAll('[data-stream-item-id]')).filter(node => !existingIds.has(node.getAttribute('data-stream-item-id')));
+        return candidates.find(node => node && node.getClientRects().length && fold(node.innerText).includes(fold(job.text))) || null;
+      }, 30000, 250);
       if (!visible) throw new Error('publication non retrouvée dans le flux visible');
       showBanner(`Plan riche publié et vérifié dans ${job.courseName || `Groupe ${job.group}`}.`, 'ok');
       await send({ type: 'complete', outcome: 'published' });
