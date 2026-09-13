@@ -1,4 +1,4 @@
-# Pont natif Classroom v1.1.0
+# Pont natif Classroom v1.1.1
 
 Ce module Chrome accompagne le userscript `classroom-rich-publish.user.js` v1.3.0. Il conserve l’onglet Classroom ouvert après une réussite ou une erreur et permet de remplacer le texte d’une annonce existante avec le plan riche du formulaire. L’annonce est ciblée par son identifiant; son contenu est vérifié avant remplacement. Ses commentaires et pièces jointes restent attachés à la même annonce.
 
@@ -24,7 +24,7 @@ Protections intégrées :
 
 ## Mise à jour d’une installation existante
 
-Remplacer les fichiers dans le dossier réellement chargé par Chrome avec ceux de l’archive v1.1.0, puis recharger l’extension dans `chrome://extensions`. Recharger une ancienne copie du dossier ne la met pas à jour. Mettre également à jour le userscript vers v1.3.0 et actualiser le générateur.
+Remplacer les fichiers dans le dossier réellement chargé par Chrome avec ceux de l’archive v1.1.1, puis recharger l’extension dans `chrome://extensions`. Recharger une ancienne copie du dossier ne la met pas à jour. Le userscript reste en v1.3.0. Actualiser le générateur.
 
 La modification utilise le contenu actuel du formulaire : réutiliser au besoin un cours enregistré, apporter les corrections, puis sélectionner l’annonce à remplacer. La sélection d’une annonce ne remplit pas automatiquement le formulaire.
 

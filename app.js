@@ -2354,7 +2354,7 @@ async function publishPlanToGroup(group) {
   }
 
   const emojiBox = document.getElementById('avec-emojis');
-  if (classroomEditTarget && (document.documentElement.dataset.pdcNativePublisherVersion !== '1.1.0' || document.documentElement.dataset.pdcClassroomBridgeVersion !== '1.3.0')) {
+  if (classroomEditTarget && (document.documentElement.dataset.pdcNativePublisherVersion !== '1.1.1' || document.documentElement.dataset.pdcClassroomBridgeVersion !== '1.3.0')) {
     showToast('La mise à jour du pont Classroom et du script est nécessaire pour modifier une annonce.', 'err', 6000);
     return;
   }

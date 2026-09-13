@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.1.1';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let activeRequestId = '';
   let activePhase = 'idle';
@@ -106,8 +106,8 @@
     if (announcementEditor()) throw new Error('Un éditeur est déjà ouvert. Fermez-le avant de modifier cette annonce.');
     const card = await waitFor(() => announcementCard(job.announcementId), 30000, 200);
     if (!card) throw new Error('L’annonce sélectionnée est introuvable. Aucune nouvelle annonce ne sera créée.');
-    const menu = Array.from(card.querySelectorAll('[aria-haspopup="menu"]'))
-      .find(button => fold(button.getAttribute('aria-label')).includes("options d'annonce"));
+    const menu = await waitFor(() => Array.from((announcementCard(job.announcementId) || card).querySelectorAll('[aria-haspopup="menu"]'))
+      .find(button => fold(button.getAttribute('aria-label')).includes("options d'annonce")), 12000);
     if (!menu) throw new Error('Menu de modification de cette annonce introuvable.');
     await send({ type: 'activate' });
     menu.scrollIntoView({ block: 'center' });

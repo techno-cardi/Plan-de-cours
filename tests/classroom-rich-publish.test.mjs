@@ -11,6 +11,22 @@ const nativeBackground = fs.readFileSync(new URL('../chrome-classroom-native-bri
 const nativeGenerator = fs.readFileSync(new URL('../chrome-classroom-native-bridge/generator.js', import.meta.url), 'utf8');
 const nativeClassroom = fs.readFileSync(new URL('../chrome-classroom-native-bridge/classroom.js', import.meta.url), 'utf8');
 
+const editSource = nativeClassroom.slice(nativeClassroom.indexOf('  async function openExistingAnnouncement'), nativeClassroom.indexOf('  function hasStyledText'));
+let hydrated = false, openedEditor = false;
+const editMenu = { getAttribute: () => hydrated ? "Options d'annonce pour Cours #9" : '', scrollIntoView() {}, click() {} };
+const targetCard = { querySelectorAll: () => [editMenu] };
+const targetEditor = { innerText: 'Cours #9' };
+const editContext = vm.createContext({
+  announcementEditor: () => openedEditor ? targetEditor : null,
+  announcementCard: () => targetCard,
+  fold: value => String(value || '').toLowerCase(),
+  send: async () => ({ ok: true }),
+  document: { querySelectorAll: () => [{ getClientRects: () => [1], textContent: 'Modifier', click() { openedEditor = true; } }] },
+  waitFor: async read => { const first = read(); if (first) return first; hydrated = true; return read(); }
+});
+vm.runInContext(`${editSource}; this.open = openExistingAnnouncement;`, editContext);
+assert.equal(await editContext.open({ announcementId: '9', originalText: 'Cours #9' }), targetEditor, 'Attendre le libellé du menu, pas seulement sa présence');
+
 assert.equal(versionedUserscript.trimEnd(), userscript.trimEnd(), 'La copie versionnée doit correspondre au script canonique');
 assert.match(userscript, /@version\s+1\.3\.0/);
 assert.match(userscript, /dataset\.pdcClassroomBridgeVersion = VERSION/);
@@ -24,10 +40,10 @@ assert.doesNotMatch(userscript, /n5NjMc|F7Tqub|batchexecute|GM_openInTab|documen
 assert.doesNotMatch(userscript, /\.innerHTML\s*=/, 'Le userscript ne doit jamais écrire dans innerHTML (Trusted Types Classroom)');
 
 assert.equal(manifest.manifest_version, 3);
-assert.equal(manifest.version, '1.1.0');
+assert.equal(manifest.version, '1.1.1');
 assert.deepEqual(manifest.permissions.sort(), ['alarms', 'debugger', 'storage', 'tabs']);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_REQUEST/);
-assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.1\.0'/);
+assert.match(nativeGenerator, /pdcNativePublisherVersion = '1\.1\.1'/);
 assert.match(nativeGenerator, /PDC_NATIVE_PUBLISH_RESULT/);
 assert.match(nativeGenerator, /pdcNativeClassroomLastResult/);
 assert.match(nativeGenerator, /pdcNativeRequestAck/);
@@ -242,8 +258,8 @@ assert.match(app, /querySelectorAll\('li > li'\)/);
 assert.match(app, /event\.shiftKey \? 'outdent' : 'indent'/);
 assert.match(app, /primaryItems \|\| richToStructuredLines/);
 assert.match(app, /durableIndent = '&nbsp;'\.repeat\(depth \* 4\)/);
-assert.match(index, /app\.js\?v=1\.0\.32/);
-assert.match(index, /changelog-version-badge">v1\.0\.32/);
+assert.match(index, /app\.js\?v=1\.0\.33/);
+assert.match(index, /changelog-version-badge">v1\.0\.33/);
 assert.match(index, /id="btn-course-group-31"/);
 assert.match(index, /id="btn-course-group-32"/);
 assert.match(index, /id="btn-course-group-51"/);
@@ -406,8 +422,8 @@ dateContext.restoreDate({ dateISO: '2026-08-29T12:00:00.000Z', dateDisplay: '28 
 assert.equal(dateInput.value, expectedToday);
 dateContext.restoreDate({ dateDisplay: '7 septembre 2026' });
 assert.equal(dateInput.value, expectedToday);
-assert.match(index, /app\.js\?v=1\.0\.32/);
-assert.match(index, /v1\.0\.32/);
+assert.match(index, /app\.js\?v=1\.0\.33/);
+assert.match(index, /v1\.0\.33/);
 assert.match(index, /onclick="refreshCoursePreview\(\)"/);
 assert.match(app, /async function refreshCoursePreview\(\)/);
 assert.match(app, /await generer\(\)/);
