@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Plan de cours - Publication riche Classroom
 // @namespace    https://github.com/techno-cardi/Plan-de-cours
-// @version      1.3.0
-// @description  Prépare le plan riche et le transmet au pont Chrome natif, sans RPC privée ni brouillon orphelin.
+// @version      1.4.0
+// @description  Prépare le plan riche et le transmet au pont Chrome natif depuis le générateur ou Agenda.
 // @author       techno-cardi
 // @match        https://techno-cardi.github.io/Plan-de-cours/*
+// @match        https://techno-cardi.github.io/Portail-Cardinal-Roy/agendakevin/*
 // @match        https://classroom.google.com/*
 // @run-at       document-idle
 // @grant        GM_setValue
@@ -19,13 +20,15 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
   const REQUEST = 'PDC_NATIVE_PUBLISH_REQUEST';
   const ACK = 'PDC_NATIVE_PUBLISH_ACK';
   const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
+  const GROUP_MAP_UPDATE = 'PDC_NATIVE_GROUP_MAP_UPDATE';
   const OLD_PENDING_KEY = 'plan_de_cours_classroom_rich_pending_v1';
   const OLD_DONE_KEY = 'plan_de_cours_classroom_rich_last_done_v1';
   const MIGRATION_KEY = 'plan_de_cours_native_bridge_migrated_v1';
+  const QUICK_GROUPS = ['31', '32', '51'];
 
   function decodeHtmlText(value) {
     const named = { amp: '&', apos: "'", gt: '>', lt: '<', nbsp: ' ', quot: '"' };
@@ -83,6 +86,69 @@
       .normalize('NFC');
   }
 
+  function normalizeGroup(value) {
+    const raw = String(value || '').trim();
+    const match = raw.match(/(?:^|[^0-9])(31|32|51)(?:[^0-9]|$)/);
+    return match ? match[1] : raw;
+  }
+
+  function classroomToken(courseId) {
+    const base64 = btoa(String(courseId || ''));
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+
+  function courseOptionScore(text, group) {
+    const raw = String(text || '');
+    if (new RegExp(`groupe\\s*${group}(?:\\D|$)`, 'i').test(raw)) return 100;
+    if (new RegExp(`(?:^|\\D)${group}(?:\\D|$)`).test(raw)) return 40;
+    return 0;
+  }
+
+  function discoverGeneratorGroupMap() {
+    if (!location.pathname.startsWith('/Plan-de-cours/')) return [];
+    const select = document.getElementById('classroom-course-select');
+    if (!select) return [];
+    const options = [...select.options].filter(option => /^\d+$/.test(String(option.value || '')));
+    const groups = [];
+    for (const group of QUICK_GROUPS) {
+      const ranked = options
+        .map(option => ({ option, score: courseOptionScore(option.textContent, group) }))
+        .filter(item => item.score > 0)
+        .sort((a, b) => b.score - a.score);
+      if (!ranked.length) continue;
+      if (ranked.length > 1 && ranked[0].score === ranked[1].score) continue;
+      const option = ranked[0].option;
+      const courseId = String(option.value || '');
+      groups.push({
+        group,
+        courseId,
+        courseName: String(option.textContent || '').trim(),
+        courseSection: '',
+        alternateLink: `https://classroom.google.com/c/${classroomToken(courseId)}`
+      });
+    }
+    return groups;
+  }
+
+  function publishDiscoveredGroupMap() {
+    const groups = discoverGeneratorGroupMap();
+    if (!groups.length) return false;
+    window.postMessage({ type: GROUP_MAP_UPDATE, groups }, location.origin);
+    return groups.length === QUICK_GROUPS.length;
+  }
+
+  function startGeneratorGroupDiscovery() {
+    if (!location.pathname.startsWith('/Plan-de-cours/')) return;
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts += 1;
+      const complete = publishDiscoveredGroupMap();
+      if (complete || attempts >= 90) clearInterval(timer);
+    }, 1000);
+    const root = document.documentElement;
+    new MutationObserver(() => publishDiscoveredGroupMap()).observe(root, { childList: true, subtree: true });
+  }
+
   function installGeneratorBridge() {
     document.documentElement.dataset.pdcClassroomBridge = '1';
     document.documentElement.dataset.pdcClassroomBridgeVersion = VERSION;
@@ -130,7 +196,8 @@
       if (handling) return;
       handling = true;
       const input = event.detail || {};
-      const courseId = String(input.courseId || '');
+      const group = normalizeGroup(input.group || '');
+      const courseId = String(input.courseId || '').trim();
       const preview = document.getElementById('plan-preview');
       let acked = false;
       let timer = 0;
@@ -156,12 +223,32 @@
 
       const requestId = String(input.requestId || (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`));
       try {
-        if (!/^\d+$/.test(courseId)) throw new Error('identifiant de groupe invalide');
-        const target = new URL(input.alternateLink || '');
-        if (target.hostname !== 'classroom.google.com' || !/\/c\//.test(target.pathname)) throw new Error('lien exact du groupe introuvable');
-        const html = cleanRichHtml(preview?.innerHTML || '').normalize('NFC');
-        const text = richHtmlToText(html);
-        if (!html || !text || preview?.querySelector('.empty-state')) throw new Error('le plan courant est vide');
+        if (!group) throw new Error('groupe Classroom manquant');
+        if (courseId && !/^\d+$/.test(courseId)) throw new Error('identifiant de groupe invalide');
+        let alternateLink = String(input.alternateLink || '').trim();
+        if (alternateLink) {
+          const target = new URL(alternateLink);
+          if (target.hostname !== 'classroom.google.com' || !/\/c\//.test(target.pathname)) throw new Error('lien exact du groupe introuvable');
+          alternateLink = target.toString();
+        }
+
+        const sourceHtml = String(input.richHtml || preview?.innerHTML || '');
+        const html = cleanRichHtml(sourceHtml).normalize('NFC');
+        const text = String(input.text || richHtmlToText(html)).trim().normalize('NFC');
+        if (!html || !text || (!input.richHtml && preview?.querySelector('.empty-state'))) throw new Error('le plan courant est vide');
+
+        if (courseId && alternateLink) {
+          window.postMessage({
+            type: GROUP_MAP_UPDATE,
+            groups: [{
+              group,
+              courseId,
+              courseName: String(input.courseName || ''),
+              courseSection: String(input.courseSection || ''),
+              alternateLink
+            }]
+          }, location.origin);
+        }
 
         GM_setClipboard(html, 'html');
         window.addEventListener('message', onAck);
@@ -172,15 +259,17 @@
             requestId,
             createdAt: Date.now(),
             courseId,
-            group: String(input.group || ''),
+            group,
             courseName: String(input.courseName || ''),
             courseSection: String(input.courseSection || ''),
-            alternateLink: target.toString(),
+            alternateLink,
             announcementId: String(input.announcementId || ''),
             originalText: String(input.originalText || ''),
             text,
-            title: text.split(/\r?\n/).find(Boolean) || '',
-            probes: text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length >= 12).slice(0, 5)
+            title: String(input.title || text.split(/\r?\n/).find(Boolean) || ''),
+            probes: Array.isArray(input.probes)
+              ? input.probes.map(String).slice(0, 5)
+              : text.split(/\r?\n/).map(line => line.trim()).filter(line => line.length >= 12).slice(0, 5)
           }
         }, location.origin);
         ackPoll = setInterval(() => {
@@ -198,6 +287,8 @@
         alert(`Publication Classroom impossible : ${error?.message || error}`);
       }
     }, true);
+
+    startGeneratorGroupDiscovery();
   }
 
   function retireOldRpcState() {
