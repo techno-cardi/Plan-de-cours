@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Plan de cours — Pont natif Classroom",
-  "version": "1.1.1",
-  "description": "Publie les plans riches avec l’éditeur natif de Google Classroom.",
+  "version": "1.2.0",
+  "description": "Publie les plans riches depuis le générateur ou Agenda avec l’éditeur natif de Google Classroom.",
   "permissions": ["alarms", "debugger", "storage", "tabs"],
   "host_permissions": [
     "https://techno-cardi.github.io/Plan-de-cours/*",
+    "https://techno-cardi.github.io/Portail-Cardinal-Roy/agendakevin/*",
     "https://classroom.google.com/*"
   ],
   "background": {
@@ -13,7 +14,10 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://techno-cardi.github.io/Plan-de-cours/*"],
+      "matches": [
+        "https://techno-cardi.github.io/Plan-de-cours/*",
+        "https://techno-cardi.github.io/Portail-Cardinal-Roy/agendakevin/*"
+      ],
       "js": ["generator.js"],
       "run_at": "document_start"
     },
