@@ -4,8 +4,11 @@
   const REQUEST = 'PDC_NATIVE_PUBLISH_REQUEST';
   const ACK = 'PDC_NATIVE_PUBLISH_ACK';
   const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
+  const GROUP_MAP_UPDATE = 'PDC_NATIVE_GROUP_MAP_UPDATE';
+  const GROUP_MAP_STATUS_REQUEST = 'PDC_NATIVE_GROUP_MAP_STATUS_REQUEST';
+  const GROUP_MAP_STATUS = 'PDC_NATIVE_GROUP_MAP_STATUS';
   const LAST_RESULT_KEY = 'pdcNativeClassroomLastResult';
-  document.documentElement.dataset.pdcNativePublisherVersion = '1.1.1';
+  document.documentElement.dataset.pdcNativePublisherVersion = '1.2.0';
   let lastDeliveredResult = '';
 
   function deliverResult(message) {
@@ -40,7 +43,35 @@
   }, 1000);
 
   window.addEventListener('message', event => {
-    if (event.source !== window || event.origin !== location.origin || event.data?.type !== REQUEST) return;
+    if (event.source !== window || event.origin !== location.origin) return;
+
+    if (event.data?.type === GROUP_MAP_UPDATE) {
+      chrome.runtime.sendMessage({ type: 'rememberGroups', groups: event.data.groups || [] }).catch(() => {});
+      return;
+    }
+
+    if (event.data?.type === GROUP_MAP_STATUS_REQUEST) {
+      chrome.runtime.sendMessage({ type: 'getGroups' }).then(result => {
+        window.postMessage({
+          type: GROUP_MAP_STATUS,
+          requestId: String(event.data.requestId || ''),
+          ok: Boolean(result?.ok),
+          groups: result?.groups || {},
+          error: String(result?.error || '')
+        }, location.origin);
+      }).catch(error => {
+        window.postMessage({
+          type: GROUP_MAP_STATUS,
+          requestId: String(event.data.requestId || ''),
+          ok: false,
+          groups: {},
+          error: String(error?.message || error)
+        }, location.origin);
+      });
+      return;
+    }
+
+    if (event.data?.type !== REQUEST) return;
     const requestId = String(event.data.requestId || '');
     const payload = event.data.payload || {};
     document.documentElement.dataset.pdcNativeRequestAck = requestId;
