@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.1.1';
+  const VERSION = '1.2.0';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let activeRequestId = '';
   let activePhase = 'idle';
@@ -77,9 +77,6 @@
   }
 
   async function openAnnouncementEditor() {
-    // Classroom peut afficher le bouton avant que son gestionnaire de clic soit
-    // hydraté. Réutiliser un éditeur déjà ouvert, puis retenter le même bouton
-    // après activation évite l'échec intermittent sans créer de brouillon en trop.
     let editor = announcementEditor();
     if (editor) return editor;
     for (let attempt = 0; attempt < 3; attempt++) {
