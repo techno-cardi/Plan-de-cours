@@ -1,17 +1,81 @@
 const JOB_KEY = 'pdcNativeClassroomJob';
 const LAST_RESULT_KEY = 'pdcNativeClassroomLastResult';
+const GROUP_MAP_KEY = 'pdcNativeClassroomGroupMapV1';
 const MAX_IDLE_MS = 90 * 1000;
 const WATCHDOG_ALARM = 'pdcNativeClassroomWatchdog';
 const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
 
 function validGeneratorSender(sender) {
-  try { return new URL(sender.tab?.url || '').origin === 'https://techno-cardi.github.io'; }
-  catch (_) { return false; }
+  try {
+    const url = new URL(sender.tab?.url || '');
+    if (url.origin !== 'https://techno-cardi.github.io') return false;
+    return url.pathname.startsWith('/Plan-de-cours/') || url.pathname.startsWith('/Portail-Cardinal-Roy/agendakevin/');
+  } catch (_) { return false; }
 }
 
 function validClassroomSender(sender) {
   try { return new URL(sender.tab?.url || '').origin === 'https://classroom.google.com'; }
   catch (_) { return false; }
+}
+
+function normalizedGroup(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/(?:^|[^0-9])(31|32|51)(?:[^0-9]|$)/);
+  return match ? match[1] : raw;
+}
+
+function normalizeClassroomTarget(raw, fallbackGroup = '') {
+  const courseId = String(raw?.courseId || '').trim();
+  if (!/^\d+$/.test(courseId)) throw new Error('cours invalide');
+  const target = new URL(String(raw?.alternateLink || ''));
+  if (target.origin !== 'https://classroom.google.com' || !/\/c\//.test(target.pathname)) {
+    throw new Error('destination Classroom invalide');
+  }
+  return {
+    group: normalizedGroup(raw?.group || fallbackGroup),
+    courseId,
+    courseName: String(raw?.courseName || ''),
+    courseSection: String(raw?.courseSection || ''),
+    alternateLink: target.toString()
+  };
+}
+
+async function readGroupMap() {
+  return (await chrome.storage.local.get(GROUP_MAP_KEY))[GROUP_MAP_KEY] || {};
+}
+
+async function rememberGroups(groups) {
+  const map = await readGroupMap();
+  let changed = false;
+  for (const raw of Array.isArray(groups) ? groups.slice(0, 20) : []) {
+    try {
+      const target = normalizeClassroomTarget(raw);
+      if (!target.group) continue;
+      map[target.group] = { ...target, savedAt: Date.now() };
+      changed = true;
+    } catch (_) { /* entrée invalide ignorée */ }
+  }
+  if (changed) await chrome.storage.local.set({ [GROUP_MAP_KEY]: map });
+  return map;
+}
+
+async function resolveClassroomTarget(payload) {
+  const group = normalizedGroup(payload?.group || '');
+  const directCourseId = String(payload?.courseId || '').trim();
+  const directLink = String(payload?.alternateLink || '').trim();
+  if (directCourseId && directLink) {
+    const direct = normalizeClassroomTarget(payload, group);
+    if (group) await rememberGroups([direct]);
+    return direct;
+  }
+
+  if (!group) throw new Error('groupe Classroom manquant');
+  const map = await readGroupMap();
+  const remembered = map[group];
+  if (!remembered) {
+    throw new Error(`Groupe ${group} non lié. Ouvre le Générateur de plan de cours une fois, attends que tes cours Classroom soient chargés, puis réessaie.`);
+  }
+  return normalizeClassroomTarget(remembered, group);
 }
 
 async function readJob() {
@@ -110,12 +174,32 @@ async function nativeClick(tabId, x, y) {
 }
 
 async function handleMessage(message, sender) {
+  if (message?.type === 'rememberGroups') {
+    if (!validGeneratorSender(sender)) throw new Error('origine du générateur refusée');
+    const map = await rememberGroups(message.groups || []);
+    return { ok: true, groups: Object.keys(map) };
+  }
+
+  if (message?.type === 'getGroups') {
+    if (!validGeneratorSender(sender)) throw new Error('origine du générateur refusée');
+    const map = await readGroupMap();
+    return {
+      ok: true,
+      groups: Object.fromEntries(Object.entries(map).map(([group, value]) => [group, {
+        group,
+        courseId: String(value.courseId || ''),
+        courseName: String(value.courseName || ''),
+        courseSection: String(value.courseSection || ''),
+        alternateLink: String(value.alternateLink || ''),
+        savedAt: Number(value.savedAt || 0)
+      }]))
+    };
+  }
+
   if (message?.type === 'prepare') {
     if (!validGeneratorSender(sender)) throw new Error('origine du générateur refusée');
     const payload = message.payload || {};
-    if (!/^\d+$/.test(String(payload.courseId || ''))) throw new Error('cours invalide');
-    const target = new URL(payload.alternateLink || '');
-    if (target.origin !== 'https://classroom.google.com' || !/\/c\//.test(target.pathname)) throw new Error('destination Classroom invalide');
+    const target = await resolveClassroomTarget(payload);
     if (!String(payload.text || '').trim() || !String(payload.title || '').trim()) throw new Error('plan vide');
     if (payload.announcementId && (!/^\d+$/.test(String(payload.announcementId)) || !String(payload.originalText || '').trim())) throw new Error('annonce à modifier invalide');
     let existing = await readJob();
@@ -128,11 +212,11 @@ async function handleMessage(message, sender) {
     const job = {
       requestId: String(payload.requestId || ''),
       createdAt: Number(payload.createdAt || Date.now()),
-      courseId: String(payload.courseId),
-      group: String(payload.group || ''),
-      courseName: String(payload.courseName || ''),
-      courseSection: String(payload.courseSection || ''),
-      alternateLink: target.toString(),
+      courseId: target.courseId,
+      group: target.group || normalizedGroup(payload.group || ''),
+      courseName: String(payload.courseName || target.courseName || ''),
+      courseSection: String(payload.courseSection || target.courseSection || ''),
+      alternateLink: target.alternateLink,
       announcementId: String(payload.announcementId || ''),
       originalText: String(payload.originalText || ''),
       text: String(payload.text),
