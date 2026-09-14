@@ -29,6 +29,7 @@
   const OLD_DONE_KEY = 'plan_de_cours_classroom_rich_last_done_v1';
   const MIGRATION_KEY = 'plan_de_cours_native_bridge_migrated_v1';
   const QUICK_GROUPS = ['31', '32', '51'];
+  let lastGroupMapSignature = '';
 
   function decodeHtmlText(value) {
     const named = { amp: '&', apos: "'", gt: '>', lt: '<', nbsp: ' ', quot: '"' };
@@ -133,20 +134,33 @@
   function publishDiscoveredGroupMap() {
     const groups = discoverGeneratorGroupMap();
     if (!groups.length) return false;
-    window.postMessage({ type: GROUP_MAP_UPDATE, groups }, location.origin);
+    const signature = groups.map(item => `${item.group}:${item.courseId}`).sort().join('|');
+    if (signature !== lastGroupMapSignature) {
+      lastGroupMapSignature = signature;
+      window.postMessage({ type: GROUP_MAP_UPDATE, groups }, location.origin);
+    }
     return groups.length === QUICK_GROUPS.length;
   }
 
   function startGeneratorGroupDiscovery() {
     if (!location.pathname.startsWith('/Plan-de-cours/')) return;
     let attempts = 0;
-    const timer = setInterval(() => {
+    let timer = 0;
+    const observer = new MutationObserver(() => {
+      if (publishDiscoveredGroupMap()) {
+        clearInterval(timer);
+        observer.disconnect();
+      }
+    });
+    timer = setInterval(() => {
       attempts += 1;
-      const complete = publishDiscoveredGroupMap();
-      if (complete || attempts >= 90) clearInterval(timer);
+      if (publishDiscoveredGroupMap() || attempts >= 90) {
+        clearInterval(timer);
+        observer.disconnect();
+      }
     }, 1000);
-    const root = document.documentElement;
-    new MutationObserver(() => publishDiscoveredGroupMap()).observe(root, { childList: true, subtree: true });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    publishDiscoveredGroupMap();
   }
 
   function installGeneratorBridge() {
