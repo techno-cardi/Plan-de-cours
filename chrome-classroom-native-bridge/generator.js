@@ -8,7 +8,7 @@
   const GROUP_MAP_STATUS_REQUEST = 'PDC_NATIVE_GROUP_MAP_STATUS_REQUEST';
   const GROUP_MAP_STATUS = 'PDC_NATIVE_GROUP_MAP_STATUS';
   const LAST_RESULT_KEY = 'pdcNativeClassroomLastResult';
-  document.documentElement.dataset.pdcNativePublisherVersion = '1.2.0';
+  document.documentElement.dataset.pdcNativePublisherVersion = '1.2.1';
   let lastDeliveredResult = '';
 
   function deliverResult(message) {
