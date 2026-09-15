@@ -1,6 +1,7 @@
 (() => {
   'use strict';
 
+  const BRIDGE_VERSION = '1.2.2';
   const SUCCESS_PREFIX = 'Plan riche publié et vérifié';
   const SUCCESS_DELAY_MS = 2000;
   let successTimer = 0;
@@ -9,8 +10,12 @@
     const banner = document.getElementById('pdc-native-classroom-status');
     if (!banner) return;
 
+    const text = String(banner.textContent || '');
+    const normalized = text.replace(/pont natif v\d+(?:\.\d+)*\s*$/i, `pont natif v${BRIDGE_VERSION}`);
+    if (normalized !== text) banner.textContent = normalized;
+
     clearTimeout(successTimer);
-    if (!String(banner.textContent || '').includes(SUCCESS_PREFIX)) return;
+    if (!normalized.includes(SUCCESS_PREFIX)) return;
 
     successTimer = window.setTimeout(() => {
       const current = document.getElementById('pdc-native-classroom-status');
