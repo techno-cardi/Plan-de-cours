@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Plan de cours — Pont natif Classroom",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Publie les plans riches depuis le générateur ou Agenda avec l’éditeur natif de Google Classroom.",
   "permissions": ["alarms", "debugger", "storage", "tabs"],
   "host_permissions": [
@@ -23,7 +23,7 @@
     },
     {
       "matches": ["https://classroom.google.com/*"],
-      "js": ["classroom.js"],
+      "js": ["classroom-autolink.js", "classroom.js"],
       "run_at": "document_idle"
     }
   ]
