@@ -9,7 +9,9 @@ function validGeneratorSender(sender) {
   try {
     const url = new URL(sender.tab?.url || '');
     if (url.origin !== 'https://techno-cardi.github.io') return false;
-    return url.pathname.startsWith('/Plan-de-cours/') || url.pathname.startsWith('/Portail-Cardinal-Roy/agendakevin/');
+    return url.pathname.startsWith('/Plan-de-cours/')
+      || url.pathname === '/Portail-Cardinal-Roy/agendakevin'
+      || url.pathname.startsWith('/Portail-Cardinal-Roy/agendakevin/');
   } catch (_) { return false; }
 }
 
@@ -104,8 +106,6 @@ async function finishJob(job, outcome, error = '') {
     await chrome.storage.local.remove(JOB_KEY).catch(() => {});
     await chrome.alarms.clear(WATCHDOG_ALARM).catch(() => {});
     await chrome.tabs.update(job.sourceTabId, { active: true }).catch(() => {});
-    // Garder le flux ou l’éditeur ouvert, même si la confirmation tarde :
-    // fermer cet onglet peut masquer une publication réussie ou un brouillon à récupérer.
   }
 }
 
@@ -226,9 +226,6 @@ async function handleMessage(message, sender) {
       status: 'opening'
     };
     await writeJob(job);
-    // Classroom ne construit pas toujours son éditeur dans un onglet créé en
-    // arrière-plan. L'activer ici garantit le chargement du script de contenu,
-    // sans dépendre de ce même script pour demander ensuite l'activation.
     const classroomTab = await chrome.tabs.create({
       url: job.alternateLink,
       active: true,
