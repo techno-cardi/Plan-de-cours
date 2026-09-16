@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const BRIDGE_VERSION = '1.2.2';
+  const BRIDGE_VERSION = '1.2.3';
   const SUCCESS_PREFIX = 'Plan riche publié et vérifié';
   const SUCCESS_DELAY_MS = 2000;
   let successTimer = 0;
