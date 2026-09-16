@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Plan de cours - Publication riche Classroom
 // @namespace    https://github.com/techno-cardi/Plan-de-cours
-// @version      1.4.0
+// @version      1.4.1
 // @description  Prépare le plan riche et le transmet au pont Chrome natif depuis le générateur ou Agenda.
 // @author       techno-cardi
 // @match        https://techno-cardi.github.io/Plan-de-cours/*
+// @match        https://techno-cardi.github.io/Portail-Cardinal-Roy/agendakevin
 // @match        https://techno-cardi.github.io/Portail-Cardinal-Roy/agendakevin/*
 // @match        https://classroom.google.com/*
 // @run-at       document-idle
@@ -20,7 +21,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
   const REQUEST = 'PDC_NATIVE_PUBLISH_REQUEST';
   const ACK = 'PDC_NATIVE_PUBLISH_ACK';
   const RESULT = 'PDC_NATIVE_PUBLISH_RESULT';
