@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const text=fs.readFileSync(__dirname+'/cardinal-chatgpt-classroom.user.js','utf8');
+const text=fs.readFileSync(__dirname+'/../cardinal-chatgpt-classroom.user.js','utf8');
 const context={module:{exports:{}},location:{hostname:'nothing.invalid'},GM_setValue(){},GM_getValue(){},GM_deleteValue(){},GM_setClipboard(){}};
 vm.runInNewContext(text,context);
 const {makeHtml,validMap}=context.module.exports;
