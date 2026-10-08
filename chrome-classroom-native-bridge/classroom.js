@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.2.4';
+  const VERSION = '1.2.5';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let activeRequestId = '';
   let activePhase = 'idle';
@@ -23,8 +23,9 @@
     box.setAttribute('role', 'status');
     const colors = kind === 'ok' ? ['#e6f4ea', '#8bc49d', '#185b2d'] : kind === 'error' ? ['#fce8e6', '#e09a93', '#7b1b14'] : ['#fff8e1', '#e0b84f', '#4b3a08'];
     box.style.cssText = `position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:2147483647;max-width:760px;width:calc(100% - 28px);background:${colors[0]};border:1px solid ${colors[1]};border-radius:10px;padding:12px 15px;box-shadow:0 8px 28px rgba(0,0,0,.18);font:14px/1.45 Arial,sans-serif;color:${colors[2]}`;
-    box.textContent = `${message} — pont natif v${VERSION}`;
+    box.textContent = message;
     document.body.appendChild(box);
+    if (kind === 'ok') setTimeout(() => { if (box.isConnected) box.remove(); }, 6500);
   }
 
   async function waitFor(read, timeoutMs, intervalMs = 120) {
@@ -176,7 +177,9 @@
         location.replace(target.toString());
         return;
       }
-      await waitFor(() => document.body?.innerText?.includes(job.courseName || `Groupe ${job.group}`), 12000);
+      // La conformité du cours est déjà vérifiée par courseToken(location.pathname).
+      // Un nom stocké peut être concaténé et ne pas figurer dans le DOM : ne jamais
+      // bloquer 12 secondes sur sa présence. L'éditeur est attendu séparément.
       const existingIds = new Set(Array.from(document.querySelectorAll('[data-stream-item-id]')).map(node => node.getAttribute('data-stream-item-id')));
       const editor = job.announcementId ? await openExistingAnnouncement(job) : await openAnnouncementEditor();
       if (!editor) throw new Error('éditeur natif Classroom introuvable');
@@ -190,7 +193,7 @@
         selection.removeAllRanges();
         selection.addRange(range);
       }
-      showBanner(`Collage riche natif en cours dans ${job.courseName || `Groupe ${job.group}`}…`);
+      showBanner(`Préparation de la publication - Groupe ${job.group}`);
       activePhase = 'pasting';
       // Le premier Ctrl+V peut être perdu lors de l'activation de l'onglet ou
       // du montage de l'éditeur React. Réessayer seulement s'il est encore vide.
@@ -257,7 +260,7 @@
         return candidates.find(node => node && node.getClientRects().length && fold(node.innerText).includes(fold(job.text))) || null;
       }, 30000, 250);
       if (!visible) throw new Error('publication non retrouvée dans le flux visible');
-      showBanner(`Plan riche publié et vérifié dans ${job.courseName || `Groupe ${job.group}`}.`, 'ok');
+      showBanner(`Publication réussie - Groupe ${job.group}`, 'ok');
       await send({ type: 'complete', outcome: 'published' });
       activePhase = 'finished';
     } catch (error) {
