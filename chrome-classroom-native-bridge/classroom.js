@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = '1.2.0';
+  const VERSION = '1.2.4';
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   let activeRequestId = '';
   let activePhase = 'idle';
@@ -66,14 +66,26 @@
   }
 
   function announcementEditor() {
-    const candidates = Array.from(document.querySelectorAll(
-      '[role="dialog"] [contenteditable="true"][role="textbox"], [contenteditable="true"][aria-label*="Annonce"]'
-    ));
-    return candidates.find(editor => {
-      if (!editor.getClientRects().length) return false;
-      const label = fold(editor.getAttribute('aria-label'));
-      return label.includes('annonce') && !editor.closest('[aria-hidden="true"]');
-    }) || null;
+    // Les attributs ARIA de Classroom changent selon la langue et les versions.
+    // Ne pas s'appuyer exclusivement sur "Annonce", ni retenir un champ caché.
+    const candidates = Array.from(document.querySelectorAll('[contenteditable="true"]'))
+      .filter(editor => editor.getClientRects().length
+        && !editor.closest('[aria-hidden="true"]')
+        && editor.getAttribute('aria-disabled') !== 'true');
+    const labeled = candidates.find(editor => {
+      const label = fold([
+        editor.getAttribute('aria-label'),
+        editor.getAttribute('data-placeholder'),
+        editor.getAttribute('placeholder'),
+      ].filter(Boolean).join(' '));
+      return /annonce|announcement|partager.*classe|share.*class/.test(label);
+    });
+    if (labeled) return labeled;
+    const inComposer = candidates.filter(editor => editor.closest('[role="dialog"], [data-is-edit-mode="true"]'));
+    if (inComposer.length === 1) return inComposer[0];
+    // Un seul champ éditable visible est un repli sûr; plusieurs champs
+    // ambigus ne doivent jamais recevoir un collage automatique.
+    return candidates.length === 1 ? candidates[0] : null;
   }
 
   async function openAnnouncementEditor() {
@@ -180,13 +192,28 @@
       }
       showBanner(`Collage riche natif en cours dans ${job.courseName || `Groupe ${job.group}`}…`);
       activePhase = 'pasting';
-      await send({ type: 'paste' });
-
-      const pasted = await waitFor(() => {
-        const text = fold(editor.innerText || '');
-        return text.includes(fold(job.title)) && (job.probes || []).slice(1, 3).every(probe => text.includes(fold(probe)));
-      }, 7000);
-      if (!pasted) throw new Error('le vrai collage riche n’a pas été reconnu');
+      // Le premier Ctrl+V peut être perdu lors de l'activation de l'onglet ou
+      // du montage de l'éditeur React. Réessayer seulement s'il est encore vide.
+      let pasted = null;
+      for (let attempt = 0; attempt < 2 && !pasted; attempt += 1) {
+        await send({ type: 'activate' });
+        editor.focus();
+        if (attempt) {
+          editor.click();
+          await sleep(250);
+          editor.focus();
+        }
+        await send({ type: 'paste' });
+        pasted = await waitFor(() => {
+          const text = fold(editor.innerText || editor.textContent || '');
+          return text.includes(fold(job.title))
+            && (job.probes || []).slice(1, 3).every(probe => text.includes(fold(probe)));
+        }, attempt ? 4500 : 6500);
+        if (!pasted && fold(editor.innerText || editor.textContent || '')) {
+          throw new Error('Le collage a inséré un contenu inattendu. Aucune publication automatique effectuée.');
+        }
+      }
+      if (!pasted) throw new Error('Le collage riche n’a pas été reçu par l’éditeur Classroom après deux tentatives. Vérifiez le pont Chrome et le presse-papiers.');
       const titleUnderlined = hasStyledText(editor, job.title, 'underline');
       const devoirBold = hasStyledText(editor, 'Devoir', 'bold');
       if (!titleUnderlined || !devoirBold) console.warn('[Plan de cours] Classroom a masqué ses styles dans le DOM; le collage riche est conservé et sera publié.');
