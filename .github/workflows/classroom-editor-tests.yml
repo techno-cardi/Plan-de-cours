@@ -5,12 +5,16 @@ on:
     paths:
       - 'chrome-classroom-native-bridge/**'
       - 'tests/classroom-editor-reliability.test.mjs'
+      - 'cardinal-chatgpt-classroom.user.js'
+      - 'tests/cardinal-chatgpt-classroom.test.cjs'
       - '.github/workflows/classroom-editor-tests.yml'
   push:
     branches: [main]
     paths:
       - 'chrome-classroom-native-bridge/**'
       - 'tests/classroom-editor-reliability.test.mjs'
+      - 'cardinal-chatgpt-classroom.user.js'
+      - 'tests/cardinal-chatgpt-classroom.test.cjs'
       - '.github/workflows/classroom-editor-tests.yml'
 
 jobs:
@@ -23,6 +27,8 @@ jobs:
           node-version: '22'
       - run: node --check chrome-classroom-native-bridge/classroom.js
       - run: node --test tests/classroom-editor-reliability.test.mjs
+      - run: node --check cardinal-chatgpt-classroom.user.js
+      - run: node tests/cardinal-chatgpt-classroom.test.cjs
       - name: Préparer le pont Chrome installable
         run: |
           cd chrome-classroom-native-bridge
