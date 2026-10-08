@@ -1,0 +1,25 @@
+name: Fiabilite du collage Classroom
+
+on:
+  pull_request:
+    paths:
+      - 'chrome-classroom-native-bridge/**'
+      - 'tests/classroom-editor-reliability.test.mjs'
+      - '.github/workflows/classroom-editor-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'chrome-classroom-native-bridge/**'
+      - 'tests/classroom-editor-reliability.test.mjs'
+      - '.github/workflows/classroom-editor-tests.yml'
+
+jobs:
+  classroom-editor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check chrome-classroom-native-bridge/classroom.js
+      - run: node --test tests/classroom-editor-reliability.test.mjs
