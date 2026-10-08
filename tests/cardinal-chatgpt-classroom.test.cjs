@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const text=fs.readFileSync(__dirname+'/cardinal-chatgpt-classroom.user.js','utf8');
+const context={module:{exports:{}},location:{hostname:'nothing.invalid'},GM_setValue(){},GM_getValue(){},GM_deleteValue(){},GM_setClipboard(){}};
+vm.runInNewContext(text,context);
+const {makeHtml,validMap}=context.module.exports;
+const output=makeHtml('Salut & merci','Bonjour!\n\nVoici votre dictée.\n\n1. Votre copie\n\nBon travail!');
+assert.equal((output.html.match(/<br><br>/g)||[]).length,4);
+assert.ok(output.html.includes('Salut &amp; merci'));
+assert.ok(output.text.includes('Voici votre dictée.\n\n1. Votre copie'));
+assert.ok(!makeHtml('ok','Bonjour!\n\nSuite').html.includes('<p><br></p>'));
+assert.deepEqual([...validMap({'31':{courseId:'123',alternateLink:'https://classroom.google.com/c/a'},'evil':{courseId:'1',alternateLink:'https://evil.com'}})].map(x=>x[0]),['31']);
+assert.throws(()=>makeHtml('essai','\n\n'),/vide/);
+console.log('cardinal-chatgpt-classroom userscript tests: 6 passed');
