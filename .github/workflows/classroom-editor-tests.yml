@@ -23,3 +23,14 @@ jobs:
           node-version: '22'
       - run: node --check chrome-classroom-native-bridge/classroom.js
       - run: node --test tests/classroom-editor-reliability.test.mjs
+      - name: Préparer le pont Chrome installable
+        run: |
+          cd chrome-classroom-native-bridge
+          zip -q -r "$GITHUB_WORKSPACE/Pont-Classroom-v1.2.4.zip" .
+      - name: Archiver le ZIP vérifié
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pont-Classroom-v1.2.4
+          path: Pont-Classroom-v1.2.4.zip
+          if-no-files-found: error
+          retention-days: 30
