@@ -1,4 +1,4 @@
-# Pont natif Classroom v1.2.3
+# Pont natif Classroom v1.2.4
 
 Ce module Chrome accompagne le userscript `classroom-rich-publish.user.js` v1.4.1. Il conserve l’onglet Classroom ouvert après une réussite ou une erreur, publie les plans riches depuis le Générateur de plan de cours ou Agenda, et permet toujours de remplacer le texte d’une annonce existante depuis le générateur.
 
